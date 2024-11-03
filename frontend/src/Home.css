@@ -1,0 +1,25 @@
+.home-container {
+    text-align: center;
+    padding: 20px;
+}
+
+.project-blocks {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.project-block {
+    background-color: #4CAF50; /* Green background */
+    color: white; /* White text */
+    padding: 40px;
+    border-radius: 10px;
+    width: 200px; /* Width of the blocks */
+    cursor: pointer; /* Pointer cursor on hover */
+    transition: background-color 0.3s; /* Smooth transition */
+}
+
+.project-block:hover {
+    background-color: #45a049; /* Darker green on hover */
+}

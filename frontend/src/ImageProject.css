@@ -1,0 +1,108 @@
+.container {
+  display: flex;
+  width: 100%;
+  gap: 20px;
+}
+
+.class-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background-color: #f0f8ff;
+  position: relative;
+}
+
+.train-panel, .prediction-panel {
+  flex: 0 0 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+
+.train-panel {
+  background-color: #e6ffe6;
+  justify-content: center;
+  height: 300px; 
+  overflow-y: auto; 
+}
+
+.prediction-panel {
+  background-color: #ffe6e6;
+  height: 300px; 
+  overflow-y: auto; 
+}
+
+.class-section {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.upload-button {
+  background-color: #4caf50;
+  color: white;
+  padding: 10px 20px;
+  font-size: 16px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: auto; 
+}
+
+.upload-button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.train-button {
+  background-color: #2196f3;
+  color: white;
+  padding: 10px 20px;
+  font-size: 16px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.predict-button {
+  background-color: #ff5722;
+  color: white;
+  padding: 10px 20px;
+  font-size: 16px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.status-message {
+  margin-top: 10px;
+  color: #333;
+  font-size: 14px;
+}
+
+.captured-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.image-preview {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.webcam-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 10px;
+}
