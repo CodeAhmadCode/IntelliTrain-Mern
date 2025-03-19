@@ -1,0 +1,107 @@
+/* Navbar styles */
+.navbar {
+    background-color: #1a202c; /* Equivalent to bg-primary-dark */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Equivalent to shadow-xl */
+    position: relative;
+  }
+  
+  .navbar-container {
+    max-width: auto; /* Equivalent to container mx-auto */
+    margin: 0 auto;
+    padding: 0 1rem;
+  }
+  
+  .navbar-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 7rem; /* Equivalent to h-28 */
+  }
+  
+  .navbar-brand {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+  }
+  
+  .logo-container {
+    display: flex;
+    align-items: center;
+  }
+  
+  .logo {
+    width: 9rem; /* Equivalent to w-36 */
+    height: 4rem; /* Equivalent to h-16 */
+    object-fit: contain;
+    transition: transform 0.3s ease;
+  }
+  
+  .brand-name {
+    color: white;
+    font-size: 1.5rem; /* Equivalent to text-2xl */
+    font-weight: 600; /* Equivalent to font-semibold */
+    margin-left: 0.125rem; /* Equivalent to ml-0.5 */
+    transition: color 0.3s ease;
+  }
+  
+  .navbar-brand:hover .logo {
+    transform: scale(1.05); /* Equivalent to group-hover:scale-105 */
+  }
+  
+  .navbar-brand:hover .brand-name {
+    color: #38b2ac; /* Equivalent to text-secondary */
+  }
+  
+  .navbar-links {
+    display: flex;
+    align-items: center;
+    gap: 2rem; /* Equivalent to space-x-8 */
+  }
+  
+  .nav-link {
+    color: white;
+    text-decoration: none;
+    font-size: 1rem;
+    position: relative;
+    transition: all 0.3s ease;
+  }
+  
+  .nav-link:hover {
+    color: #38b2ac; /* Equivalent to hover:text-secondary */
+  }
+  
+  .nav-link::after {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 2px;
+    background-color: #38b2ac; /* Equivalent to bg-secondary */
+    left: 0;
+    bottom: -0.25rem;
+    transform: scaleX(0); /* Equivalent to after:scale-x-0 */
+    transition: transform 0.3s ease;
+  }
+  
+  .nav-link:hover::after {
+    transform: scaleX(1); /* Equivalent to hover:after:scale-x-100 */
+  }
+  
+  .login-button {
+    background-color: #38b2ac; /* Equivalent to bg-secondary */
+    color: #1a202c; /* Equivalent to text-primary-dark */
+    padding: 0.5rem 1.5rem; /* Equivalent to px-6 py-2 */
+    border-radius: 0.5rem; /* Equivalent to rounded-lg */
+    display: flex;
+    align-items: center;
+    gap: 0.5rem; /* Equivalent to space-x-2 */
+    text-decoration: none;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+  }
+  
+  .login-button:hover {
+    background-color: #319795; /* Equivalent to hover:bg-secondary-dark */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* Equivalent to hover:shadow-lg */
+    transform: scale(1.05); /* Equivalent to hover:scale-105 */
+  }
+  
