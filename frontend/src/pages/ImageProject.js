@@ -67,6 +67,8 @@ const ImageProject = () => {
             formData.append('image', imageFile);
             formData.append('class', 'class1');
 
+            console.log(`Uploading Class1 Image ${i} with class: class1`);
+
             const uploadResponse = await axios.post('http://127.0.0.1:5000/api/upload', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
@@ -91,6 +93,8 @@ const ImageProject = () => {
 
             formData.append('image', imageFile);
             formData.append('class', 'class2');
+
+            console.log(`Uploading Class2 Image ${i} with class: class2`);
 
             const uploadResponse = await axios.post('http://127.0.0.1:5000/api/upload', formData, {
                 headers: {

@@ -168,8 +168,17 @@ class ImageUpload(Resource):
             current_classes = get_classes()
             app.logger.debug(f'Available classes: {current_classes}')
 
+            if not current_classes:
+                # If no classes exist, add the new class
+                images_collection.insert_one({'class': class_name})
+                current_classes = get_classes()
+                app.logger.debug(f'Added new class: {class_name}. Available classes: {current_classes}')
+
             if class_name not in current_classes:
-                raise ValueError(f'Invalid class specified: {class_name}')
+                # If the class does not exist, add it
+                images_collection.insert_one({'class': class_name})
+                current_classes = get_classes()
+                app.logger.debug(f'Added new class: {class_name}. Available classes: {current_classes}')
 
             img_data = image_file.read()
             base64_image = base64.b64encode(img_data).decode('utf-8')
@@ -191,7 +200,6 @@ class ImageUpload(Resource):
         except Exception as e:
             app.logger.error(f'Unexpected error: {str(e)}')
             return Response(str({'error': 'An unexpected error occurred', 'details': str(e)}), status=500)
-
 api.add_resource(TrainModel, '/api/train')
 api.add_resource(ImageUpload, '/api/upload')
 
