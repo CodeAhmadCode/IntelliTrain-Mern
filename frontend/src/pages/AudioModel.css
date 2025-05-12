@@ -1,0 +1,653 @@
+/* Base Styles */
+.audio-model-container {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Alert Messages */
+.alert {
+  padding: 12px 20px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.alert-error {
+  background-color: #ffebee;
+  color: #c62828;
+  border-left: 4px solid #c62828;
+}
+
+.alert-info {
+  background-color: #e3f2fd;
+  color: #1565c0;
+  border-left: 4px solid #1565c0;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.2em;
+  cursor: pointer;
+  color: inherit;
+}
+
+.spinner {
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top: 3px solid #1565c0;
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
+  margin-left: 10px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Grid Layout */
+.model-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 1200px) {
+  .model-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Panels */
+.panel {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Classes Panel */
+.classes-panel {
+  grid-column: span 1;
+}
+
+.class-list {
+  margin-top: 20px;
+}
+
+.class-item {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 15px;
+  margin-bottom: 15px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.class-item:hover {
+  border-color: #bbdefb;
+}
+
+.class-item.active {
+  border-color: #2196f3;
+  background-color: #f5f9ff;
+}
+
+.class-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.class-header h3 {
+  margin: 0;
+  color: #333;
+}
+
+.sample-count {
+  background-color: #e3f2fd;
+  color: #0d47a1;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.8em;
+}
+
+.class-controls {
+  margin-top: 15px;
+}
+
+.record-btn {
+  background-color: #f44336;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.record-btn.recording {
+  background-color: #333;
+}
+
+.recording-preview {
+  margin-top: 15px;
+}
+
+.preview-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.save-btn {
+  background-color: #4caf50;
+  color: white;
+}
+
+.predict-btn {
+  background-color: #2196f3;
+  color: white;
+}
+
+.samples-list {
+  margin-top: 20px;
+}
+
+.sample-item {
+  border-top: 1px solid #eee;
+  padding-top: 15px;
+  margin-top: 15px;
+}
+
+.sample-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  color: #f44336;
+  cursor: pointer;
+}
+
+.add-class-form {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.add-class-form input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.add-class-btn {
+  background-color: #673ab7;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.add-class-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Training Panel */
+.training-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.training-info {
+  flex: 1;
+}
+
+.stats {
+  display: flex;
+  gap: 20px;
+  margin: 20px 0;
+}
+
+.stat-item {
+  text-align: center;
+  flex: 1;
+}
+
+/* Base Styles */
+.audio-model-container {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: #333;
+}
+
+/* Alert Messages */
+.alert {
+  padding: 12px 20px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.alert-error {
+  background-color: #ffebee;
+  color: #c62828;
+  border-left: 4px solid #c62828;
+}
+
+.alert-info {
+  background-color: #e3f2fd;
+  color: #1565c0;
+  border-left: 4px solid #1565c0;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.2em;
+  cursor: pointer;
+  color: inherit;
+}
+
+/* Spinner */
+.spinner {
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top: 3px solid #1565c0;
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
+  margin-left: 10px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Grid Layout */
+.model-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 1200px) {
+  .model-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Panels */
+.panel {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.panel h2 {
+  margin-top: 0;
+  color: #2c3e50;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+/* Prediction Results - Fixed spacing */
+.prediction-results {
+  margin-top: 20px;
+}
+
+.prediction-item {
+  margin-bottom: 15px;
+}
+
+.prediction-class {
+  display: flex;
+  justify-content: space-between;
+  align-items: center; /* Ensures vertical alignment */
+  margin-bottom: 8px;
+  gap: 10px; /* Adds consistent spacing */
+}
+
+.class-name {
+  font-weight: 600;
+  flex-grow: 1;
+}
+
+.confidence-value {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.confidence-badge {
+  color: #4caf50;
+  font-weight: bold;
+}
+
+/* Prediction Panel Container */
+.prediction-panel {
+  display: flex;
+  flex-direction: column;
+  height: auto; /* Remove fixed height */
+  min-height: 300px; /* Minimum height to prevent collapsing */
+  overflow: visible; /* Ensure content is never clipped */
+}
+
+/* Prediction Results Container */
+.prediction-results {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px; /* Consistent spacing between items */
+  padding: 8px 0; /* Add some vertical padding */
+}
+
+/* Individual Prediction Items */
+.prediction-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prediction-class {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.confidence-value {
+  white-space: nowrap; /* Prevent percentage from wrapping */
+  margin-left: 8px;
+}
+
+.confidence-bar-container {
+  width: 100%;
+  height: 8px;
+  background-color: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .prediction-panel {
+    min-height: auto; /* Remove minimum height on mobile */
+  }
+  
+  .prediction-class {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+}
+/* Chevron indicator */
+.chevron {
+  margin-left: 8px;
+  transition: transform 0.2s ease;
+  font-size: 0.9em;
+}
+
+.chevron.open {
+  transform: rotate(90deg);
+}
+
+/* Class item transitions */
+.class-controls {
+  overflow: hidden;
+  transition: 
+    height 0.3s ease,
+    opacity 0.2s ease;
+}
+
+.class-item {
+  transition: background-color 0.2s ease;
+}
+
+.confidence-bar {
+  height: 100%;
+  background-color: #4caf50;
+  transition: width 0.3s ease;
+}
+
+/* Buttons */
+button {
+  border: none;
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.record-btn {
+  background-color: #f44336;
+  color: white;
+}
+
+.record-btn.recording {
+  background-color: #333;
+}
+
+.save-btn {
+  background-color: #4caf50;
+  color: white;
+}
+
+.predict-btn {
+  background-color: #2196f3;
+  color: white;
+}
+
+.file-upload-btn {
+  background: #2196F3;
+  color: white;
+}
+
+.file-upload-btn:hover {
+  background: #1976D2;
+}
+
+.add-class-btn {
+  background-color: #673ab7;
+  color: white;
+}
+
+.train-btn {
+  background-color: #ff9800;
+  color: white;
+  padding: 12px 20px;
+  font-size: 1em;
+  width: 100%;
+}
+
+/* Form Elements */
+.input-options {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+}
+
+.add-class-form {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.add-class-form input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  min-width: 200px;
+}
+
+/* Utility Classes */
+.audio-format-note {
+  font-size: 0.9em;
+  color: #666;
+  margin-top: 5px;
+  font-style: italic;
+}
+
+/* Prediction confidence specific fixes */
+.prediction-item.confident .confidence-bar {
+  background-color: #4caf50;
+}
+
+.prediction-warning {
+  color: #ff9800;
+  font-size: 0.9em;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.stat-value {
+  font-size: 2em;
+  font-weight: bold;
+  color: #2196f3;
+  display: block;
+}
+
+.stat-label {
+  color: #666;
+  font-size: 0.9em;
+}
+
+.train-btn {
+  background-color: #ff9800;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 4px;
+  font-size: 1em;
+  cursor: pointer;
+  margin-top: 20px;
+  width: 100%;
+}
+
+.train-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.train-btn.training {
+  background-color: #ff9800;
+  opacity: 0.8;
+}
+
+.requirements {
+  margin-top: 30px;
+  font-size: 0.9em;
+  color: #666;
+}
+
+.requirements ul {
+  padding-left: 20px;
+}
+
+/* Prediction Panel */
+.prediction-results {
+  margin-top: 20px;
+}
+
+.prediction-item {
+  margin-bottom: 15px;
+}
+
+.prediction-class {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+
+.confidence-bar-container {
+  height: 10px;
+  background-color: #e0e0e0;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.confidence-bar {
+  height: 100%;
+  background-color: #4caf50;
+  transition: width 0.3s;
+}
+
+.prediction-placeholder {
+  text-align: center;
+  color: #666;
+  margin-top: 50px;
+}
+/* Add to AudioModel.css */
+.file-upload-btn {
+  background: #2196F3;
+  color: white;
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: 10px;
+  transition: background 0.3s;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.file-upload-btn:hover {
+  background: #1976D2;
+}
+
+.input-options {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 15px;
+}
+
+.audio-format-note {
+  font-size: 0.9em;
+  color: #666;
+  margin-top: 5px;
+  font-style: italic;
+}
+
+/* Audio Player Styles */
+audio {
+  width: 100%;
+  margin-top: 10px;
+}
+
+audio::-webkit-media-controls-panel {
+  background-color: #f5f5f5;
+}
+
+audio::-webkit-media-controls-play-button,
+audio::-webkit-media-controls-mute-button {
+  background-color: #2196f3;
+  border-radius: 50%;
+}
