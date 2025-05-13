@@ -1,6 +1,6 @@
 // src/App.jsx
 import { useEffect, useState } from 'react';
-import {  Routes, Route } from 'react-router-dom';
+import {  Routes, Route, useLocation } from 'react-router-dom';
 
 import StarField   from './components/StarField';
 import Navbar      from './components/Navbar';
@@ -13,6 +13,7 @@ import Footer      from './components/Footer';
 import ImageClassificationModel   from './pages/ImageClassificationModel';         // <-- your new page
 
 function App() {
+  const { pathname } = useLocation();
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [cursorVisible, setCursorVisible]   = useState(false);
 
@@ -63,12 +64,14 @@ function App() {
                 <Contact />
               </>
             }/>
+            
+
             <Route path="/projects/image-model" element={<ImageClassificationModel />} />
             
             {/* add more routes here as needed */}
           </Routes>
 
-          <Footer />
+          {pathname === '/' && <Footer />}
         </div>
       </div>
     
