@@ -33,7 +33,7 @@ const Projects: React.FC = () => {
       title: "Audio Models",
       description: "Build sound classification models using spectrogram analysis. Processes audio directly in browser with Web Audio API.",
       image: AudioClassificationImage,
-      link: '/projects/image-model',
+      link: '/projects/audio-model',
       tags: ["Audio", "Speech", "Sound Recognition"]
     },
     {

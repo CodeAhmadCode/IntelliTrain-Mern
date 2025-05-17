@@ -11,4 +11,15 @@ export default defineConfig({
     sourcemap: true,           // generate source maps in production builds
   },
   logLevel: 'info', 
+  server: {
+    proxy: {
+      // proxy anything under /api to your backend
+      '/api': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+        // optional: rewrite the path on the way out
+        // rewrite: (path) => path.replace(/^\/api/, '/api'),
+      },
+    },
+  },
 });

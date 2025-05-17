@@ -85,7 +85,7 @@ def validate_audio(audio_bytes):
             return False, "Audio too short (minimum 0.5 second)"
             
         rms = librosa.feature.rms(y=y)
-        if np.mean(rms) < 0.01:
+        if np.mean(rms) < 0.005:
             return False, "Audio too quiet"
             
         return True, ""

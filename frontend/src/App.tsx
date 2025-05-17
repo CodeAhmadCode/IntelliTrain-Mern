@@ -10,7 +10,8 @@ import Projects    from './components/Projects';
 import About       from './components/About';
 import Contact     from './components/Contact';
 import Footer      from './components/Footer';
-import ImageClassificationModel   from './pages/ImageClassificationModel';         // <-- your new page
+import ImageClassificationModel   from './pages/ImageClassificationModel';         
+import AudioClassificationModel   from './pages/AudioClassificationModel';
 
 function App() {
   const { pathname } = useLocation();
@@ -67,6 +68,7 @@ function App() {
             
 
             <Route path="/projects/image-model" element={<ImageClassificationModel />} />
+            <Route path="/projects/audio-model" element={<AudioClassificationModel />} />
             
             {/* add more routes here as needed */}
           </Routes>
