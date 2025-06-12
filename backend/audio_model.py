@@ -5,7 +5,6 @@ import traceback
 import subprocess
 import datetime
 from werkzeug.utils import secure_filename
-
 import numpy as np
 import tensorflow as tf
 import tensorflow_hub as hub

@@ -1,18 +1,19 @@
+// src/components/Navbar.tsx
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';  // Use Link for client-side routing
 import { Menu, X, ChevronRight } from 'lucide-react';
-import IntelliTrainLogo from "../assets/side.png";
 
 const Navbar: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navLinks = [
-    { name: 'Home', href: '#home' },
-    { name: 'Models', href: '#models' },
-    { name: 'Projects', href: '#projects' },
-    { name: 'About', href: '#about' },
-    { name: 'Login', href: '#models' },
+    { name: 'Home', href: '/#home' },
+    { name: 'Models', href: '/#models' },
+    { name: 'Projects', href: '/#projects' },
+    { name: 'About', href: '/#about' },
+    { name: 'Login', href: '/login' },
   ];
 
   useEffect(() => {
@@ -32,7 +33,7 @@ const Navbar: React.FC = () => {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center">
-          {/* Logo */}
+          
           {/* Logo */}
           {/* <motion.div 
             initial={{ opacity: 0 }}
@@ -45,23 +46,25 @@ const Navbar: React.FC = () => {
               alt="Logo"
               className="h-18 w-15 mr-1" 
             />
-            
           </motion.div> */}
 
           {/* Desktop menu */}
           <div className="hidden md:flex space-x-8">
             {navLinks.map((link, i) => (
-              <motion.a
+              <motion.div
                 key={link.name}
-                href={link.href}
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: 0.1 * i }}
-                className="text-sm uppercase tracking-widest hover:text-glow transition-all duration-300 relative group"
               >
-                {link.name}
-                <span className="absolute -bottom-1 left-0 w-0 h-[1px] bg-space-white group-hover:w-full transition-all duration-300"></span>
-              </motion.a>
+                <Link
+                  to={link.href === '/login' ? '/login' : link.href}
+                  className="text-sm uppercase tracking-widest hover:text-glow transition-all duration-300 relative group"
+                >
+                  {link.name}
+                  <span className="absolute -bottom-1 left-0 w-0 h-[1px] bg-space-white group-hover:w-full transition-all duration-300"></span>
+                </Link>
+              </motion.div>
             ))}
           </div>
 
@@ -93,15 +96,15 @@ const Navbar: React.FC = () => {
       >
         <div className="px-4 pt-2 pb-4 grid grid-cols-1 gap-2">
           {navLinks.map((link) => (
-            <a
+            <Link
               key={link.name}
-              href={link.href}
+              to={link.href === '/login' ? '/login' : link.href}
               className="flex items-center py-3 border-b border-white/10 hover:bg-white/5 transition-colors duration-300"
               onClick={() => setMobileMenuOpen(false)}
             >
               <span>{link.name}</span>
               <ChevronRight className="h-4 w-4 ml-auto" />
-            </a>
+            </Link>
           ))}
         </div>
       </motion.div>
