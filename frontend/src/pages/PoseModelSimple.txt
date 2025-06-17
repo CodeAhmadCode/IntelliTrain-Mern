@@ -1,0 +1,1356 @@
+import React, { useState, useRef, useEffect, MutableRefObject } from 'react';
+import { motion } from 'framer-motion';
+import * as tf from '@tensorflow/tfjs';
+import * as posedetection from '@tensorflow-models/pose-detection';
+import { PoseDetector } from '@tensorflow-models/pose-detection';
+import {
+  Card,
+  CardHeader,
+  CardContent,
+  Button,
+  IconButton,
+  Typography,
+  TextField,
+  Menu,
+  MenuItem,
+  Modal,
+  Collapse,
+  Tooltip,
+  Switch,
+  LinearProgress,
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+} from '@mui/material';
+import {
+  Edit as EditIcon,
+  MoreVert as MoreVertIcon,
+  CameraAlt as CameraAltIcon,
+  Upload as UploadIcon,
+  ArrowForward as ArrowForwardIcon,
+  Delete as DeleteIcon,
+  Close as CloseIcon,
+  HelpOutline as HelpOutlineIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon
+} from '@mui/icons-material';
+
+
+const KEYPOINT_CONNECTIONS = [
+  [5, 7], [7, 9], [6, 8], [8, 10], // Arms
+  [11, 13], [13, 15], [12, 14], [14, 16], // Legs
+  [5, 6], [11, 12], [5, 11], [6, 12] // Torso
+];
+const drawKeypoints = (
+  ctx: CanvasRenderingContext2D,
+  poses: posedetection.Pose[],
+  imageWidth: number,
+  imageHeight: number
+) => {
+  ctx.strokeStyle = '#00FF00'; // Green lines for connections
+  ctx.fillStyle = '#FF0000'; // Red dots for keypoints
+  ctx.lineWidth = 2;
+
+  // Get canvas dimensions
+  const canvasWidth = ctx.canvas.width;
+  const canvasHeight = ctx.canvas.height;
+
+  // Calculate scaling factors
+  const scaleX = canvasWidth / imageWidth;
+  const scaleY = canvasHeight / imageHeight;
+
+  poses.forEach(pose => {
+    // Draw keypoints
+    pose.keypoints.forEach(kp => {
+      if (kp.score && kp.score > 0.5) {
+        const scaledX = kp.x * scaleX;
+        const scaledY = kp.y * scaleY;
+        ctx.beginPath();
+        ctx.arc(scaledX, scaledY, 5, 0, 2 * Math.PI); // Draw circle for keypoint
+        ctx.fill();
+      }
+    });
+
+    // Draw connections
+    KEYPOINT_CONNECTIONS.forEach(([startIdx, endIdx]) => {
+      const startKp = pose.keypoints[startIdx];
+      const endKp = pose.keypoints[endIdx];
+      if (startKp.score && endKp.score && startKp.score > 0.5 && endKp.score > 0.5) {
+        const scaledStartX = startKp.x * scaleX;
+        const scaledStartY = startKp.y * scaleY;
+        const scaledEndX = endKp.x * scaleX;
+        const scaledEndY = endKp.y * scaleY;
+        ctx.beginPath();
+        ctx.moveTo(scaledStartX, scaledStartY);
+        ctx.lineTo(scaledEndX, scaledEndY);
+        ctx.stroke();
+      }
+    });
+  });
+};
+
+
+// Utility to prompt user before refreshing if unsaved images exist
+// function useUnsavedChangesPrompt(hasImages: boolean) {
+//   useEffect(() => {
+//     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+//       if (hasImages) {
+//         e.preventDefault();
+//         e.returnValue = '';
+//       }
+//     };
+//     window.addEventListener('beforeunload', handleBeforeUnload);
+//     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+//   }, [hasImages]);
+// }
+
+interface WebcamModalProps {
+  classId: number;
+  addImageToClass: (classId: number, image: string) => void;
+  onClose: () => void;
+}
+
+export type DataLayerEvent = {
+  event: string;
+  classId?: number;
+  [key: string]: unknown;
+};
+
+declare global {
+  interface Window {
+    dataLayer: DataLayerEvent[];
+  }
+}
+const WebcamModal: React.FC<WebcamModalProps & { poseDetector: PoseDetector | null }> = ({ classId, addImageToClass, onClose, poseDetector }) => {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null); // New canvas for keypoints
+  const intervalRef = useRef<number | null>(null);
+  const [capturedImages, setCapturedImages] = useState<string[]>([]);
+  
+
+  useEffect(() => {
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({ event: 'webcam_opened', classId });
+
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      })
+      .catch(err => console.error('webcam error:', err));
+
+    // Real-time pose detection
+    if (poseDetector && videoRef.current && overlayCanvasRef.current) {
+      const detectPoses = async () => {
+        if (!videoRef.current || !overlayCanvasRef.current || videoRef.current.videoWidth === 0) return;
+        const poses = await poseDetector.estimatePoses(videoRef.current);
+        const ctx = overlayCanvasRef.current.getContext('2d');
+        if (!ctx) return;
+        ctx.clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height);
+        drawKeypoints(ctx, poses, videoRef.current.videoWidth, videoRef.current.videoHeight);
+      };
+      intervalRef.current = window.setInterval(detectPoses, 100); // Run every 100ms
+    }
+
+    return () => {
+      if (videoRef.current?.srcObject) {
+        (videoRef.current.srcObject as MediaStream)
+          .getTracks()
+          .forEach(track => track.stop());
+      }
+      if (intervalRef.current !== null) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [classId, poseDetector]);
+
+  const handleLoadedMetadata = () => {
+    if (!videoRef.current || !canvasRef.current || !overlayCanvasRef.current) return;
+    canvasRef.current.width = videoRef.current.videoWidth;
+    canvasRef.current.height = videoRef.current.videoHeight;
+    overlayCanvasRef.current.width = videoRef.current.videoWidth;
+    overlayCanvasRef.current.height = videoRef.current.videoHeight;
+  };
+
+  const captureImage = () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const overlayCanvas = overlayCanvasRef.current;
+    if (!video || !canvas || !overlayCanvas) return;
+    const ctx = canvas.getContext('2d');
+    const overlayCtx = overlayCanvas.getContext('2d');
+    if (!ctx || !overlayCtx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // Draw keypoints on captured image
+    if (poseDetector) {
+      poseDetector.estimatePoses(video).then(poses => {
+        drawKeypoints(overlayCtx, poses, video.videoWidth, video.videoHeight); // Use video dimensions
+        ctx.drawImage(overlayCanvas, 0, 0); // Overlay keypoints onto captured image
+        const dataUrl = canvas.toDataURL('image/jpeg');
+        setCapturedImages(prev => [...prev, dataUrl]);
+        addImageToClass(classId, dataUrl);
+        window.dataLayer.push({ event: 'image_captured', classId });
+      });
+    } else {
+      const dataUrl = canvas.toDataURL('image/jpeg');
+      setCapturedImages(prev => [...prev, dataUrl]);
+      addImageToClass(classId, dataUrl);
+      window.dataLayer.push({ event: 'image_captured', classId });
+    }
+  };
+
+  const startRecording = () => {
+    if (intervalRef.current === null) {
+      intervalRef.current = window.setInterval(captureImage, 500);
+      window.dataLayer.push({ event: 'record_started', classId });
+    }
+  };
+
+  const stopRecording = () => {
+    if (intervalRef.current !== null) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+      window.dataLayer.push({ event: 'record_stopped', classId });
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} disableScrollLock>
+      <div 
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center" 
+        onClick={onClose}
+      >
+        <motion.div
+          onClick={e => e.stopPropagation()}
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+          className="relative bg-space-gray backdrop-blur-md p-6 rounded-2xl w-[95%] max-w-4xl flex flex-col md:flex-row gap-6"
+        >
+          <IconButton
+            size="small"
+            onClick={onClose}
+            className="absolute top-4 right-4 text-space-white hover:text-glow bg-space-purple hover:bg-space-purple/90"
+          >
+            <CloseIcon />
+          </IconButton>
+
+          <div className="flex-1 relative">
+            <Typography variant="h6" className="bg-space-black text-space-white text-glow p-2 mb-4 rounded">
+              Webcam
+            </Typography>
+            <div className="relative">
+              <video
+                ref={videoRef}
+                autoPlay
+                onLoadedMetadata={handleLoadedMetadata}
+                className="w-full rounded-lg"
+              />
+              <canvas
+                ref={overlayCanvasRef}
+                className="absolute top-0 left-0 w-full h-full"
+                style={{ zIndex: 10 }}
+              />
+            </div>
+            <canvas ref={canvasRef} className="hidden" />
+            <Button
+              variant="contained"
+              className="mt-4 w-full uppercase tracking-wider transition-all duration-300 bg-space-purple hover:bg-space-purple/90 text-space-white button-glow"
+              onMouseDown={startRecording}
+              onMouseUp={stopRecording}
+              onMouseLeave={stopRecording}
+              onTouchStart={startRecording}
+              onTouchEnd={stopRecording}
+              onClick={captureImage}
+            >
+              Hold to Record
+            </Button>
+          </div>
+
+          <div className="flex-1 max-h-[400px] overflow-y-auto">
+            <Typography variant="h6" className="bg-space-black text-space-white text-glow p-2 mb-4 rounded">
+              Captured Images
+            </Typography>
+            <div className="flex flex-wrap gap-2">
+              {capturedImages.map((src, i) => (
+                <img
+                  key={i}
+                  src={src}
+                  alt={`Capture ${i + 1}`}
+                  className="w-20 h-15 object-cover rounded"
+                />
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </Modal>
+  );
+};
+
+interface ClassItem {
+  id: number;
+  name: string;
+  images: string[];
+}
+
+interface ClassCardProps {
+  classItem: ClassItem;
+  setClasses: React.Dispatch<React.SetStateAction<ClassItem[]>>;
+  addImageToClass: (classId: number, image: string) => void;
+  removeImageFromClass: (classId: number, index: number) => void;
+  poseDetector: PoseDetector | null; // Allow null
+}
+
+const ClassCard: React.FC<ClassCardProps> = ({ classItem, setClasses, addImageToClass, removeImageFromClass,poseDetector }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [tempName, setTempName] = useState(classItem.name);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [isWebcamOpen, setIsWebcamOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false); // deletion confirmation
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
+
+  useEffect(() => {
+    if (!poseDetector) return;
+    classItem.images.forEach((src, idx) => {
+      const canvas = canvasRefs.current[idx];
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const img = new Image();
+      img.src = src;
+      img.onload = async () => {
+        canvas.width = 80; // Match image size
+        canvas.height = 60;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const poses = await poseDetector.estimatePoses(img);
+        drawKeypoints(ctx, poses, canvas.width, canvas.height);
+      };
+    });
+  }, [classItem.images, poseDetector]);
+  
+  
+  const handleDeleteClick = () => {
+    setConfirmOpen(true); // open confirm dialog
+  };
+  const confirmDelete = () => {
+    setClasses(prev => prev.filter(c => c.id !== classItem.id));
+    setConfirmOpen(false);
+  };
+
+  
+
+  const handleSave = () => {
+    setClasses(prev => prev.map(c => c.id === classItem.id ? { ...c, name: tempName } : c));
+    setIsEditing(false);
+  };
+
+  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+    imageFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        addImageToClass(classItem.id, result);
+        window.dataLayer = window.dataLayer || [];
+        window.dataLayer.push({ event: 'image_uploaded', classId: classItem.id });
+      };
+      reader.readAsDataURL(file);
+    });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  return (
+  <motion.div
+    initial={{ opacity: 0, y: 30 }}
+    animate={{ opacity: 1, y: 0 }}
+    whileHover={{ scale: 1.04 }}
+    transition={{ duration: 0.4 }}
+  >
+    <Card
+      elevation={0}
+      sx={{
+        background: 'linear-gradient(135deg, #2E8B57 0%, #98FF98 100%)',
+        borderRadius: '20px',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+      }}
+      className="mt-6 mb-6"
+    >
+      <div
+        className="backdrop-blur-md p-4 rounded-lg"
+        style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+      >
+      <CardHeader
+        title={isEditing ? (
+          <TextField
+            value={tempName}
+            onChange={e => setTempName(e.target.value)}
+            onBlur={handleSave}
+            size="small"
+            className="bg-transparent text-white font-semibold"
+            InputProps={{ disableUnderline: true, sx: { color: '#f0e6ff' } }}
+          />
+        ) : (
+          <span className="text-white text-xl font-bold uppercase tracking-wide hover:text-[#ffebf0] transition-colors duration-200">
+            {tempName}
+          </span>
+        )}
+        subheader={
+          <Typography variant="body2" sx={{ color: '#d3cce3' }}>
+            {classItem.images.length} Samples
+          </Typography>
+        }
+        action={(
+          <div className="flex gap-2">
+            <IconButton sx={{ background: '#5c5470', '&:hover': { background: '#6e60a1' } }} onClick={() => setIsEditing(true)}>
+              <EditIcon sx={{ color: '#fff' }} />
+            </IconButton>
+            <IconButton sx={{ background: '#5c5470', '&:hover': { background: '#6e60a1' } }} onClick={e => setAnchorEl(e.currentTarget)}>
+              <MoreVertIcon sx={{ color: '#fff' }} />
+            </IconButton>
+            <Menu
+              anchorEl={anchorEl}
+              open={Boolean(anchorEl)}
+              onClose={() => setAnchorEl(null)}
+              PaperProps={{
+                sx: {
+                  background: 'rgba(30, 30, 60, 0.9)',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: '#fff',
+                }
+              }}
+            >
+              <MenuItem
+                onClick={handleDeleteClick}
+                sx={{
+                  color: '#ff6b6b',
+                  '&:hover': { background: 'rgba(255,107,107,0.2)' },
+                }}
+              >
+                Delete Class
+              </MenuItem>
+            </Menu>
+          </div>
+        )}
+        sx={{ p: 0, mb: 2 }}
+      />
+
+      <CardContent sx={{ p: 0 }}>
+        <Typography variant="body2" sx={{ color: '#f8f8f8', mb: 1 }}>Add Image Samples:</Typography>
+        <div className="flex flex-wrap gap-3">
+          <Tooltip title="Capture Images with your Camera" arrow>
+            <span>
+              <Button
+                  variant="contained"
+                  startIcon={<CameraAltIcon />}
+                  onClick={() => setIsWebcamOpen(true)}
+                  sx={{
+                    background: 'linear-gradient(45deg, #7b5aff, #8e8ffa)',
+                    color: '#fff',
+                    borderRadius: '8px',
+                    '&:hover': {
+                      background: 'linear-gradient(45deg, #6f4eff, #8486f3)',
+                    },
+                  }}
+                >
+                  Webcam
+                </Button>
+              </span>
+              </Tooltip>
+
+          <Tooltip title="Upload Images from your gallery" arrow>
+            <span>
+              <Button
+                variant="contained"
+                startIcon={<UploadIcon />}
+                onClick={() => fileInputRef.current?.click()}
+                sx={{
+                  background: 'linear-gradient(45deg, #7b5aff, #8e8ffa)',
+                  color: '#fff',
+                  borderRadius: '8px',
+                  '&:hover': {
+                    background: 'linear-gradient(45deg, #6f4eff, #8486f3)',
+                  },
+                }}
+              >
+                Upload
+              </Button>
+            </span>
+          </Tooltip>
+
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            ref={fileInputRef}
+            className="hidden"
+            onChange={handleUpload}
+          />
+        </div>
+
+      {classItem.images.length > 0 && (
+            <div className="mt-6 w-full overflow-x-auto">
+              <div className="flex flex-nowrap space-x-3">
+                {classItem.images.map((src, idx) => (
+                  <motion.div
+                    key={idx}
+                    initial={{ scale: 0.9 }}
+                    animate={{ scale: 1 }}
+                    whileHover={{
+                      scale: 1.05,
+                      boxShadow: '0 0 16px rgba(255,255,255,0.2)',
+                    }}
+                    transition={{ delay: idx * 0.05 }}
+                    className="relative w-20 h-15 flex-shrink-0 rounded-lg overflow-hidden"
+                  >
+                    <canvas
+                      ref={el => (canvasRefs.current[idx] = el)}
+                      className="w-full h-full"
+                    />
+                    <IconButton
+                      size="small"
+                      onClick={() => removeImageFromClass(classItem.id, idx)}
+                      sx={{
+                        position: 'absolute',
+                        top: 4,
+                        right: 4,
+                        background: '#ff4c4c',
+                        '&:hover': { background: '#ff1e1e' },
+                      }}
+                    >
+                      <DeleteIcon fontSize="small" sx={{ color: '#fff' }} />
+                    </IconButton>
+                  </motion.div>
+                ))}
+    </div>
+  </div>
+)}
+
+      </CardContent>
+    </div>
+
+    {isWebcamOpen && (
+      <div
+        className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
+        onClick={() => setIsWebcamOpen(false)}
+      >
+        <div onClick={e => e.stopPropagation()} className="relative">
+          <IconButton
+            onClick={() => setIsWebcamOpen(false)}
+            sx={{
+              position: 'absolute',
+              top: -10,
+              right: -10,
+              background: '#5c5470',
+              '&:hover': { background: '#6e60a1' },
+            }}
+          >
+            <CloseIcon sx={{ color: '#fff' }} />
+          </IconButton>
+          <WebcamModal
+            classId={classItem.id}
+            addImageToClass={addImageToClass}
+            onClose={() => setIsWebcamOpen(false)}
+            poseDetector={poseDetector} // Pass poseDetector
+          />
+        </div>
+      </div>
+    )}
+  </Card>
+  <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>Are you sure you want to delete class "{classItem.name}"?</DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
+          <Button onClick={confirmDelete} color="error">Delete</Button>
+        </DialogActions>
+    </Dialog>
+</motion.div>
+
+  );
+};
+
+function createHeadModel(numClasses: number, learningRate: number): tf.LayersModel {
+  const l2 = tf.regularizers.l2({ l2: 0.01 });
+  const model = tf.sequential();
+  model.add(tf.layers.dense({
+    inputShape: [1280],
+    units: 128,
+    activation: 'relu',
+    kernelRegularizer: l2
+  }));
+  model.add(tf.layers.batchNormalization());
+  model.add(tf.layers.dropout({ rate: 0.5 }));
+  model.add(tf.layers.dense({
+    units: numClasses,
+    activation: 'softmax',
+    kernelRegularizer: l2
+  }));
+  model.compile({
+    optimizer: tf.train.adam(learningRate),
+    loss: 'categoricalCrossentropy',
+    metrics: ['accuracy'],
+  });
+  return model;
+}
+
+interface TrainingCardProps {
+  classes: ClassItem[];
+  truncatedNet: tf.LayersModel;
+  headModelRef: MutableRefObject<tf.LayersModel | null>;
+  onTrainingComplete: () => void;
+}
+
+const TrainingCard: React.FC<TrainingCardProps> = ({ classes, truncatedNet, headModelRef,onTrainingComplete }) => {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [epochs, setEpochs] = useState(50);
+  const [batchSize, setBatchSize] = useState(16);
+  const [learningRate, setLearningRate] = useState(0.001);
+  const [isTraining, setIsTraining] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentEpoch, setCurrentEpoch] = useState(0);
+  const [trainAcc, setTrainAcc] = useState(0);
+  const [valAcc, setValAcc] = useState(0);
+
+    // Check at least one image in at least two classes before enabling train
+  const canTrain = classes.filter(c => c.images.length > 0).length >= 2;
+
+  const trainModel = async () => {
+    if (!truncatedNet || classes.length === 0) return;
+    setIsTraining(true);
+    setProgress(0);
+    
+
+    const numClasses = classes.length;
+    headModelRef.current = createHeadModel(numClasses, learningRate);
+
+    const embeddings: tf.Tensor<tf.Rank>[] = [];
+    const labels: number[] = [];
+    for (let ci = 0; ci < numClasses; ci++) {
+      for (const src of classes[ci].images) {
+        const img = new Image();
+        img.src = src;
+        await new Promise<void>(res => { 
+          img.onload = () => res();
+        });
+        const embed = tf.tidy(() => {
+          let t = tf.browser.fromPixels(img).toFloat().div(255);
+          t = tf.image.resizeBilinear(t as tf.Tensor3D, [224, 224]);
+          t = t.expandDims(0);
+          if (Math.random() > 0.5) {
+            t = tf.image.flipLeftRight(t as tf.Tensor4D);
+          }
+          const delta = tf.randomUniform([1, 1, 1, 1], -0.1, 0.1);
+          t = t.add(delta).clipByValue(0, 1);
+          return truncatedNet.predict(t) as tf.Tensor;
+        });
+
+        embeddings.push(embed);
+        labels.push(ci);
+      }
+    }
+
+    const xs = tf.concat(embeddings, 0);
+    const ys = tf.oneHot(tf.tensor1d(labels, 'int32'), numClasses);
+
+    await headModelRef.current.fit(xs, ys, {
+      epochs,
+      batchSize,
+      shuffle: true,
+      validationSplit: 0.2,
+      callbacks: [
+        {
+          onEpochEnd: async (epoch: number, logs?: tf.Logs) => {
+            if (!logs) return;
+            setProgress(((epoch + 1) / epochs) * 100);
+            setCurrentEpoch(epoch + 1);
+            setTrainAcc(logs.acc ?? 0);
+            setValAcc((logs.val_acc as number) ?? 0);
+            await tf.nextFrame();
+          }
+        }
+      ]
+    });
+
+    embeddings.forEach(e => e.dispose());
+    xs.dispose();
+    ys.dispose();
+
+    setProgress(100);
+    setTimeout(() => setIsTraining(false), 500);
+    setIsTraining(false);
+    setProgress(100);
+    onTrainingComplete(); // notify parent
+    
+  };
+return (
+  <motion.div
+    initial={{ opacity: 0, y: 10 }}
+    animate={{ opacity: 1, y: 0 }}
+    whileHover={{ scale: 1.02 }}
+    transition={{ duration: 0.4 }}
+  >
+    <Card
+      elevation={0}
+      sx={{
+        width: 300,
+        borderRadius: '12px',
+        border: '1px solid rgba(255,255,255,0.1)',
+        background: 'linear-gradient(135deg, #2E8B57, #98FF98)',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+      }}
+      className="mt-4 mb-4 overflow-hidden"
+    >
+      <div
+        className="backdrop-blur p-2"
+        style={{ background: 'rgba(255,255,255,0.06)' }}
+      >
+        <CardHeader
+          title={
+            <span className="text-white text-base font-semibold uppercase">
+              Training
+            </span>
+          }
+          sx={{
+            p: 1,
+            mb: 1,
+            background: 'rgba(255,255,255,0.12)',
+            borderRadius: '8px 8px 0 0',
+          }}
+        />
+
+        <CardContent sx={{ p: 1 }}>
+          <Tooltip
+            title={
+              (!truncatedNet)
+                ? 'Load the base model first'
+                : isTraining
+                  ? 'Training in progress'
+                  : !canTrain
+                    ? 'Add at least two class with examples'
+                    : ''
+            }
+            arrow
+            disableHoverListener={
+              Boolean(truncatedNet && !isTraining && canTrain)
+            }
+          >
+            <span>
+              <Button
+                variant="contained"
+                fullWidth
+                size="small"
+                disabled={!truncatedNet || isTraining || !canTrain}
+                onClick={trainModel}
+                sx={{
+                  background: 'linear-gradient(45deg, #7b5aff, #8e8ffa)',
+                  textTransform: 'none',
+                  borderRadius: '6px',
+                  py: 0.75,
+                  boxShadow: '0 2px 8px rgba(123,90,255,0.3)',
+                  '&:hover': {
+                    transform: 'translateY(-1px)',
+                    boxShadow: '0 4px 12px rgba(123,90,255,0.5)',
+                  },
+                  // disabled state overrides
+                  '&.Mui-disabled': {
+                    background: 'rgba(200,200,200,0.5)',
+                    boxShadow: 'none',
+                    color: 'rgba(0, 0, 0, 0.26)',   // ensure the text is faded
+                  },
+                }}
+              >
+                {isTraining ? 'Training…' : 'Train'}
+              </Button>
+            </span>
+          </Tooltip>
+
+
+          {isTraining && (
+            <>
+              <LinearProgress
+                variant="determinate"
+                value={progress}
+                sx={{ mt: 1, height: 6, borderRadius: 3 }}
+              />
+              <Typography
+                variant="caption"
+                className="block text-center text-white mt-1"
+              >
+                {currentEpoch}/{epochs} • {((trainAcc*100).toFixed(0))}% / {((valAcc*100).toFixed(0))}%
+              </Typography>
+            </>
+          )}
+
+          <Button
+            variant="outlined"
+            fullWidth
+            size="small"
+            endIcon={advancedOpen ? <ExpandLessIcon fontSize="small"/> : <ExpandMoreIcon fontSize="small"/>}
+            onClick={() => setAdvancedOpen(o => !o)}
+            sx={{
+              mt: 1,
+              borderRadius: '6px',
+              textTransform: 'none',
+              borderColor: '#fff',
+              fontSize: '0.75rem',
+              py: 0.75,
+              boxShadow: '0 0 8px rgba(255,255,255,0.1)',
+              '&:hover': { transform: 'translateY(-1px)' },
+            }}
+          >
+            Advanced
+          </Button>
+
+          <Collapse in={advancedOpen}>
+            <div
+              className="mt-2 p-2 rounded"
+              style={{ background: 'rgba(255,255,255,0.06)' }}
+            >
+              <div className="flex items-center mb-2 space-x-2 text-white text-sm">
+                <Typography className="w-16">Epochs:</Typography>
+                <TextField
+                  type="number"
+                  value={epochs}
+                  onChange={e => setEpochs(+e.target.value)}
+                  size="small"
+                  sx={{ flex: 1, '& .MuiInputBase-input': { py: 0.25, fontSize: '0.75rem' } }}
+                  InputProps={{ disableUnderline: true }}
+                />
+                <Tooltip title="Full passes">
+                  <HelpOutlineIcon fontSize="small" className="text-white"/>
+                </Tooltip>
+              </div>
+
+              <div className="flex items-center mb-2 space-x-2 text-white text-sm">
+                <Typography className="w-16">Batch:</Typography>
+                <TextField
+                  select
+                  value={batchSize}
+                  onChange={e => setBatchSize(+e.target.value)}
+                  size="small"
+                  sx={{ width: 80, '& .MuiInputBase-input': { py: 0.25, fontSize: '0.75rem' } }}
+                  InputProps={{ disableUnderline: true }}
+                >
+                  {[8,16,32,64].map(n => <MenuItem key={n} value={n}>{n}</MenuItem>)}
+                </TextField>
+                <Tooltip title="Samples per update">
+                  <HelpOutlineIcon fontSize="small" className="text-white"/>
+                </Tooltip>
+              </div>
+
+              <div className="flex items-center space-x-2 text-white text-sm">
+                <Typography className="w-16">LR:</Typography>
+                <TextField
+                  type="number"
+                  value={learningRate}
+                  onChange={e => setLearningRate(+e.target.value)}
+                  size="small"
+                  sx={{ width: 100, '& .MuiInputBase-input': { py: 0.25, fontSize: '0.75rem' } }}
+                  inputProps={{ step: 0.0001 }}
+                  InputProps={{ disableUnderline: true }}
+                />
+                <Tooltip title="Step size">
+                  <HelpOutlineIcon fontSize="small" className="text-white"/>
+                </Tooltip>
+              </div>
+            </div>
+          </Collapse>
+        </CardContent>
+      </div>
+    </Card>
+  </motion.div>
+);
+};
+
+interface PreviewCardProps {
+  classes: ClassItem[];
+  truncatedNet: tf.LayersModel;
+  headModelRef: MutableRefObject<tf.LayersModel | null>;
+  isTrained: boolean;
+}
+
+const PreviewCard: React.FC<PreviewCardProps & { poseDetector: PoseDetector | null }> = ({ classes, truncatedNet, headModelRef, isTrained, poseDetector }) => {
+  const [inputOn, setInputOn] = useState(false);
+  const [source, setSource] = useState<'Webcam' | 'File'>('Webcam');
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const [results, setResults] = useState<{ label: string; confidence: number; }[]>([]);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null); // New canvas for keypoints
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const intervalRef = useRef<number | null>(null);
+
+ const runPredict = async () => {
+  if (!truncatedNet || !headModelRef.current) return;
+  let embedding: tf.Tensor | undefined;
+  let poses: posedetection.Pose[] = [];
+
+  if (source === 'Webcam') {
+    const video = videoRef.current;
+    if (!video || video.videoWidth === 0) return;
+    embedding = tf.tidy(() => {
+      const imgTensor = tf.browser.fromPixels(video).toFloat().div(255);
+      const batched = imgTensor.expandDims(0);
+      const resized = tf.image.resizeBilinear(batched as tf.Tensor3D, [224, 224]);
+      return truncatedNet.predict(resized) as tf.Tensor;
+    });
+    if (poseDetector && overlayCanvasRef.current) {
+      poses = await poseDetector.estimatePoses(video);
+      const ctx = overlayCanvasRef.current.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height);
+        drawKeypoints(ctx, poses, video.videoWidth, video.videoHeight);
+      }
+    }
+  } else if (previewSrc) {
+    const img = new Image();
+    img.src = previewSrc;
+    await new Promise<void>(res => {
+      img.onload = () => {
+        if (overlayCanvasRef.current) {
+          // Maintain aspect ratio for canvas
+          const displayWidth = 200;
+          const aspectRatio = img.height / img.width;
+          overlayCanvasRef.current.width = displayWidth;
+          overlayCanvasRef.current.height = displayWidth * aspectRatio;
+        }
+        res();
+      };
+    });
+    embedding = tf.tidy(() => {
+      const imgTensor = tf.browser.fromPixels(img).toFloat().div(255);
+      const batched = imgTensor.expandDims(0);
+      const resized = tf.image.resizeBilinear(batched as tf.Tensor3D, [224, 224]);
+      return truncatedNet.predict(resized) as tf.Tensor;
+    });
+    if (poseDetector && overlayCanvasRef.current) {
+      poses = await poseDetector.estimatePoses(img);
+      const ctx = overlayCanvasRef.current.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height);
+        drawKeypoints(ctx, poses, img.width, img.height);
+      }
+    }
+  }
+  if (!embedding) return;
+
+  const prediction = tf.tidy(() => headModelRef.current!.predict(embedding) as tf.Tensor);
+  const values = await prediction.data();
+  const classesWithConfidences = classes.map((c, i) => ({
+    label: c.name,
+    confidence: values[i],
+  }));
+  setResults(classesWithConfidences);
+  tf.dispose([embedding, prediction]);
+};
+
+  useEffect(() => {
+    if (intervalRef.current !== null) clearInterval(intervalRef.current);
+    if (videoRef.current?.srcObject) {
+      (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+    }
+    setResults([]);
+    setPreviewSrc(null);
+
+    if (!inputOn) return;
+
+    if (source === 'Webcam') {
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.play();
+            if (overlayCanvasRef.current) {
+              overlayCanvasRef.current.width = videoRef.current.videoWidth;
+              overlayCanvasRef.current.height = videoRef.current.videoHeight;
+            }
+          }
+        })
+        .catch(err => console.error('webcam error:', err));
+      intervalRef.current = window.setInterval(runPredict, 1000);
+    }
+    if (source === 'File' && inputOn && previewSrc) {
+      runPredict();
+    }
+
+    return () => {
+      if (intervalRef.current !== null) clearInterval(intervalRef.current);
+      if (videoRef.current?.srcObject) {
+        (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+      }
+    };
+  }, [previewSrc, source, inputOn, truncatedNet, headModelRef, classes, poseDetector]);
+
+
+  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      setPreviewSrc(result);
+      runPredict();
+    };
+    reader.readAsDataURL(file);
+  };
+
+ return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ scale: 1.04 }}
+      transition={{ duration: 0.5 }}
+    >
+      <Card
+        elevation={0}
+        sx={{
+          width: 400,
+          background: 'linear-gradient(135deg, #2E8B57 0%, #98FF98 100%)',
+          borderRadius: '20px',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+        }}
+        className="mt-6 mb-6 overflow-hidden"
+      >
+        <div
+          className="backdrop-blur-md p-4"
+          style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+        >
+        <CardHeader
+          title={
+            <span className="text-white text-xl font-bold uppercase tracking-wide hover:text-[#ffebf0] transition-colors duration-200">
+              Preview
+            </span>
+          }
+          sx={{
+            p: 2,
+            mb: 2,
+            background: 'rgba(255,255,255,0.1)',
+            borderRadius: '12px 12px 0 0',
+          }}
+        />
+
+        <CardContent sx={{ p: 0 }}>
+          <div className="px-4">
+            <Tooltip
+                title={!isTrained ? 'Train model first' : ''}
+                arrow
+                disableHoverListener={isTrained}  // only listen when disabled
+              >
+                {/* span needed so Tooltip can attach even when child is disabled */}
+                <span>
+                  <Button
+                    variant="outlined"
+                    fullWidth
+                    disabled={!isTrained}
+                    onClick={() => alert('Download Model (not yet implemented)')}
+                    sx={{
+                      mb: 2,
+                      borderRadius: '8px',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.1em',
+                      transition: 'all 0.3s ease',
+                      // enabled state
+                      borderColor: '#fff',
+                      color: '#fff',
+                      background: 'linear-gradient(45deg, #1c0038 0%, #2e0051 100%)',
+                      boxShadow: '0 0 10px rgba(255,255,255,0.1)',
+                      '&:hover': {
+                        background: '#fff',
+                        color: '#1b0031',
+                        boxShadow: '0 0 15px rgba(255,255,255,0.3)',
+                        transform: 'translateY(-1px)',
+                      },
+                      '&:active': {
+                        transform: 'translateY(0)',
+                      },
+                      // disabled state
+                      '&.Mui-disabled': {
+                        background: 'rgba(0, 0, 0, 0.12)',    
+                        borderColor: 'rgba(0, 0, 0, 0.12)',  
+                        color: 'rgba(0, 0, 0, 0.26)',        
+                        boxShadow: 'none',                   
+                      },
+                    }}
+                  >
+                    Download Model
+                  </Button>
+                </span>
+              </Tooltip>
+
+            <div className="flex items-center mb-4 gap-2">
+              <Typography className="text-white">Input</Typography>
+              <Switch checked={inputOn} onChange={e => setInputOn(e.target.checked)} />
+              <Typography className="text-white">{inputOn ? 'ON' : 'OFF'}</Typography>
+            </div>
+
+            {inputOn && (
+                <>
+                  <TextField
+                    select
+                    value={source}
+                    onChange={e => setSource(e.target.value as 'Webcam' | 'File')}
+                    size="small"
+                    fullWidth
+                    className="mb-4 bg-transparent text-white rounded"
+                    InputProps={{ disableUnderline: true, sx: { color: '#f0e6ff' } }}
+                    SelectProps={{ sx: { '& .MuiSelect-icon': { color: '#fff' } } }}
+                  >
+
+                  {['Webcam', 'File'].map(opt => (
+                      <MenuItem key={opt} value={opt}>
+                        {opt}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+
+                {source === 'Webcam' && (
+                    <div className="mb-4 relative">
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        className="w-full rounded-lg"
+                      />
+                      <canvas
+                        ref={overlayCanvasRef}
+                        className="absolute top-0 left-0 w-full h-full"
+                        style={{ zIndex: 10 }}
+                      />
+                    </div>
+                  )}
+
+               {source === 'File' && (
+                <div className="mb-4 text-center">
+                  <Button
+                    variant="contained"
+                    startIcon={<UploadIcon />}
+                    onClick={() => fileRef.current?.click()}
+                    sx={{
+                      background: 'linear-gradient(45deg, #7b5aff 0%, #8e8ffa 100%)',
+                      color: '#fff',
+                      borderRadius: '8px',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.1em',
+                      transition: 'all 0.3s ease',
+                      '&:hover': {
+                        background: 'linear-gradient(45deg, #6f4eff 0%, #8486f3 100%)',
+                      },
+                    }}
+                  >
+                    Upload Image
+                  </Button>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    ref={fileRef}
+                    className="hidden"
+                    onChange={handleUpload}
+                  />
+                  {previewSrc && (
+                    <div className="relative inline-block mt-2">
+                      <img
+                        src={previewSrc}
+                        className="w-[200px] h-auto rounded-lg"
+                        style={{ display: 'block' }}
+                      />
+                      <canvas
+                        ref={overlayCanvasRef}
+                        className="absolute top-0 left-0"
+                        style={{ zIndex: 10 }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+                {results.map((res, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: i * 0.05 }}
+                    className="mb-2 p-3 rounded-lg"
+                    style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+                  >
+                    <div className="flex justify-between mb-1">
+                      <Typography className="text-white font-medium">
+                        {res.label}
+                      </Typography>
+                      <Typography className="text-white/70">
+                        {(res.confidence * 100).toFixed(1)}%
+                      </Typography>
+                    </div>
+                    <LinearProgress
+                      variant="determinate"
+                      value={res.confidence * 100}
+                      className="h-2 rounded-full"
+                      sx={{
+                        background: 'rgba(255,255,255,0.1)',
+                        '& .MuiLinearProgress-bar': {
+                          background: 'linear-gradient(45deg, #7b5aff 0%, #8e8ffa 100%)',
+                        },
+                      }}
+                    />
+                  </motion.div>
+                ))}
+              </>
+            )}
+          </div>
+        </CardContent>
+      </div>
+    </Card>
+  </motion.div>
+);
+};
+
+interface ClassInputSectionProps {
+  classes: ClassItem[];
+  setClasses: React.Dispatch<React.SetStateAction<ClassItem[]>>;
+  addImageToClass: (classId: number, image: string) => void;
+  removeImageFromClass: (classId: number, index: number) => void;
+  poseDetector: PoseDetector | null; // Allow null
+}
+
+const ClassInputSection: React.FC<ClassInputSectionProps> = ({ classes, setClasses, addImageToClass, removeImageFromClass,poseDetector }) => (
+  <div className="flex-1 min-h-0 overflow-y-auto pr-4 scrollbar-thin scrollbar-thumb-space-white/20 scrollbar-track-transparent">
+    {classes.map(c => (
+      <ClassCard
+        key={c.id}
+        classItem={c}
+        setClasses={setClasses}
+        addImageToClass={addImageToClass}
+        removeImageFromClass={removeImageFromClass}
+        poseDetector={poseDetector}
+      />
+    ))}
+   <Tooltip title="Add a new class" arrow>
+      <span>
+        <Button
+          variant="contained"
+          fullWidth
+          onClick={() => {
+            const newId = classes.length ? classes[classes.length - 1].id + 1 : 1;
+            setClasses([...classes, { id: newId, name: `Class ${newId}`, images: [] }]);
+          }}
+          sx={{
+            background: 'linear-gradient(45deg, #7b5aff 0%, #8e8ffa 100%)',
+            color: '#ffffff',
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            borderRadius: '12px',
+            boxShadow: '0 4px 15px rgba(123, 90, 255, 0.4)',
+            py: 1.5,
+            transition: 'all 0.3s ease',
+            '&:hover': {
+              background: 'linear-gradient(45deg, #6f4eff 0%, #8486f3 100%)',
+              boxShadow: '0 6px 20px rgba(123, 90, 255, 0.6)',
+              transform: 'translateY(-2px)',
+            },
+            '&:active': {
+              transform: 'translateY(0)',
+              boxShadow: '0 3px 10px rgba(123, 90, 255, 0.3)',
+            },
+          }}
+        >
+          Add another class
+        </Button>
+      </span>
+    </Tooltip>
+
+
+
+  </div>
+);
+
+const PoseEstimationModel: React.FC = () => {
+  const [classes, setClasses] = useState<ClassItem[]>([
+    { id: 1, name: 'Class 1', images: [] },
+    { id: 2, name: 'Class 2', images: [] }
+  ]);
+  const [truncatedNet, setTruncatedNet] = useState<tf.LayersModel | null>(null);
+  const [poseDetector, setPoseDetector] = useState<PoseDetector | null>(null);
+  const headModelRef = useRef<tf.LayersModel | null>(null);
+  const [isTrained, setIsTrained] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      await tf.ready();
+      // Load MobileNet (existing code)
+      const mobilenet = await tf.loadLayersModel('https://storage.googleapis.com/teachable-machine-models/mobilenet_v2_weights_tf_dim_ordering_tf_kernels_1.0_224_no_top/model.json');
+      const layer = mobilenet.getLayer('out_relu');
+      const truncatedModel = tf.model({ inputs: mobilenet.inputs, outputs: layer.output });
+      const model = tf.sequential();
+      model.add(truncatedModel);
+      model.add(tf.layers.globalAveragePooling2d({}));
+      setTruncatedNet(model);
+
+      // Load MoveNet pose detector
+      const detector = await posedetection.createDetector(posedetection.SupportedModels.MoveNet, {
+        modelType: 'SinglePose.Lightning' // Fast and lightweight model
+      });
+      setPoseDetector(detector);
+    })();
+  }, []);
+
+  const addImageToClass = (classId: number, image: string) => {
+    setClasses(prev => prev.map(c => c.id === classId ? { ...c, images: [...c.images, image] } : c));
+  };
+  const removeImageFromClass = (classId: number, index: number) => {
+    setClasses(prev => prev.map(c => c.id === classId
+      ? { ...c, images: c.images.filter((_, i) => i !== index) }
+      : c
+    ));
+  };
+
+  if (!truncatedNet) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5 }}
+        className="p-4 text-center bg-space-black text-space-white flex justify-center items-center min-h-screen"
+      >
+        <CircularProgress className="text-space-white" />
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.8 }}
+      className="bg-space-black text-space-white p-4 max-w-7xl mx-auto relative min-h-screen"
+    >
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-8 z-10 mt-10">
+        <ClassInputSection
+          classes={classes}
+          setClasses={setClasses}
+          addImageToClass={addImageToClass}
+          removeImageFromClass={removeImageFromClass}
+          poseDetector={poseDetector} // Pass poseDetector
+        />
+        
+        <ArrowForwardIcon className="hidden lg:block text-space-white text-glow my-auto mx-4" />
+        
+       <div className="flex flex-col items-center md:flex-row md:justify-center md:space-x-8 space-y-8 md:space-y-0">
+        <TrainingCard classes={classes} truncatedNet={truncatedNet} headModelRef={headModelRef} onTrainingComplete={() => setIsTrained(true)}/>
+        <ArrowForwardIcon className="hidden lg:block text-space-white text-glow my-auto mx-4" />
+        <PreviewCard   classes={classes} truncatedNet={truncatedNet} headModelRef={headModelRef} isTrained={isTrained} poseDetector={poseDetector}/>
+      </div>
+      </div>
+    </motion.div>
+  );
+};
+
+export default PoseEstimationModel;
