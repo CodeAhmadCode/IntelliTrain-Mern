@@ -23,9 +23,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
   Snackbar,
   Alert,
   Box
@@ -1095,7 +1092,6 @@ const PreviewCard: React.FC<PreviewCardProps> = ({ classes, truncatedNet, headMo
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [results, setResults] = useState<{ label: string; confidence: number }[]>([]);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [ setSelectedFormat] = useState<'TF.js' | 'TF' | 'TF Lite' | null>('TF.js');
   const [isExporting, setIsExporting] = useState(false);
   const [showCodeSnippet, setShowCodeSnippet] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
