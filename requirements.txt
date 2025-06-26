@@ -1,0 +1,11 @@
+flask
+flask-cors
+numpy==1.26.4  # Critical: Last version fully compatible with Py3.12
+tensorflow==2.16.1
+tensorflow-hub
+librosa==0.10.1  # Pinned to avoid conflicts
+scikit-learn==1.4.2
+joblib==1.4.2
+pymongo==4.7.2
+soundfile==0.12.1
+h5py==3.11.0

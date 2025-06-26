@@ -1,8 +1,0 @@
-services:
-  - type: web
-    name: intellitrain-audio-api
-    env: python
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
-    plan: free
