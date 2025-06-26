@@ -11,11 +11,11 @@ const cookieParser = require('cookie-parser');
 // Add this before your routes
 if (process.env.NODE_ENV === 'production') {
   // Serve static files from React
-  app.use(express.static(path.join(__dirname, '../client/build')));
+  app.use(express.static(path.join(__dirname, '../frontend/build')));
   
   // Handle React routing, return all requests to React app
   app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
+    res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
   });
 }
 // ----- Config & Constants -----
