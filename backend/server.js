@@ -8,16 +8,7 @@ const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
-// Add this before your routes
-if (process.env.NODE_ENV === 'production') {
-  // Serve static files from React
-  app.use(express.static(path.join(__dirname, '../frontend/build')));
-  
-  // Handle React routing, return all requests to React app
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
-  });
-}
+
 // ----- Config & Constants -----
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/audio-classification';
 const PORT = parseInt(process.env.PORT, 10) || 5000;
@@ -47,7 +38,6 @@ app.use(fileUpload({
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
-
 // ----- MongoDB Models -----
 // User Model for Authentication
 const userSchema = new mongoose.Schema({
