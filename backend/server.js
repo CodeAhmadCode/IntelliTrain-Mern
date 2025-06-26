@@ -10,7 +10,7 @@ const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 
 // ----- Config & Constants -----
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/audio-classification';
+const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://ahmadhere25:hmad123%40@intellitrain.xhhppv3.mongodb.net/?retryWrites=true&w=majority&appName=IntelliTrain" || 'mongodb://localhost:27017/audio-classification';
 const PORT = parseInt(process.env.PORT, 10) || 5000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -95,14 +95,9 @@ const sampleSchema = new mongoose.Schema({
 const Sample = mongoose.model('Sample', sampleSchema);
 
 // ----- Connect to MongoDB -----
-mongoose.connect(MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-}).then(() => console.log('MongoDB connected'))
-  .catch(err => {
-    console.error('MongoDB connection error:', err);
-    process.exit(1);
-  });
+mongoose.connect(MONGO_URI)
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
 // ----- Authentication Middleware -----
 const protect = async (req, res, next) => {
