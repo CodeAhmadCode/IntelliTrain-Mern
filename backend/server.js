@@ -11,7 +11,7 @@ const cookieParser = require('cookie-parser');
 
 // ----- Config & Constants -----
 const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://ahmadhere25:hmad123%40@intellitrain.xhhppv3.mongodb.net/?retryWrites=true&w=majority&appName=IntelliTrain" || 'mongodb://localhost:27017/audio-classification';
-const PORT = parseInt(process.env.PORT, 10) || 5000;
+const PORT = process.env.PORT || 10000; 
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const JWT_EXPIRE = process.env.JWT_EXPIRE || '1d';
@@ -110,7 +110,7 @@ mongoose.connect(process.env.MONGO_URI, {
 });
 
 // Port configuration for Render
-const PORT = process.env.PORT || 10000; // Render uses 10000 by default
+// Render uses 10000 by default
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });
