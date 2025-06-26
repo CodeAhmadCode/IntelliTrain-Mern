@@ -11,6 +11,7 @@ import About from './components/About';
 import Contact from './components/Contact';
 import Footer from './components/Footer';
 import ImageClassificationModel from './pages/ImageClassificationModel';
+import PoseClassificationModel from './pages/PoseEstimationModel';
 import AudioClassificationModel from './pages/AudioClassificationModel';
 import Login from './components/Login';  // Import the Login component
 
@@ -68,6 +69,7 @@ function App() {
 
           <Route path="/login" element={<Login />} />
           <Route path="/projects/image-model" element={<ImageClassificationModel />} />
+          <Route path="/projects/pose-model" element={<PoseClassificationModel />} />
           <Route path="/projects/audio-model" element={<AudioClassificationModel />} />
           
         </Routes>

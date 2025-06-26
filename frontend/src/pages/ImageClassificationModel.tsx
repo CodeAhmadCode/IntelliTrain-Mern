@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect, MutableRefObject } from 'react';
+import React, { useState, useRef, useEffect, MutableRefObject, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import * as tf from '@tensorflow/tfjs';
+import JSZip from 'jszip';
 
 import {
   Card,
@@ -22,6 +23,12 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+  Snackbar,
+  Alert,
+  Box
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -33,11 +40,11 @@ import {
   Close as CloseIcon,
   HelpOutline as HelpOutlineIcon,
   ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon
+  ExpandLess as ExpandLessIcon,
+  FileCopy as FileCopyIcon,
+  X,
 } from '@mui/icons-material';
-
-
-
+import { LockIcon } from 'lucide-react';
 
 // Utility to prompt user before refreshing if unsaved images exist
 function useUnsavedChangesPrompt(hasImages: boolean) {
@@ -57,6 +64,7 @@ interface WebcamModalProps {
   classId: number;
   addImageToClass: (classId: number, image: string) => void;
   onClose: () => void;
+   streamRef: React.MutableRefObject<MediaStream | null>;
 }
 
 export type DataLayerEvent = {
@@ -70,13 +78,18 @@ declare global {
     dataLayer: DataLayerEvent[];
   }
 }
-const WebcamModal: React.FC<WebcamModalProps> = ({ classId, addImageToClass, onClose }) => {
+
+const WebcamModal: React.FC<WebcamModalProps> = ({ classId, addImageToClass, onClose, streamRef }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const intervalRef = useRef<number | null>(null);
   const [capturedImages, setCapturedImages] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setLoading(true);
+    setError(null);
     window.dataLayer = window.dataLayer || [];
     window.dataLayer.push({ event: 'webcam_opened', classId });
 
@@ -84,21 +97,30 @@ const WebcamModal: React.FC<WebcamModalProps> = ({ classId, addImageToClass, onC
       .then(stream => {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          streamRef.current = stream;
         }
+        setLoading(false);
       })
-      .catch(err => console.error('webcam error:', err));
+      .catch(err => {
+        console.error('webcam error:', err);
+        setError('Cannot access camera. Please check permissions or device.');
+        setLoading(false);
+      });
 
     return () => {
-      if (videoRef.current?.srcObject) {
-        (videoRef.current.srcObject as MediaStream)
-          .getTracks()
-          .forEach(track => track.stop());
-      }
+      console.log('Cleaning up WebcamModal stream');
       if (intervalRef.current !== null) {
         clearInterval(intervalRef.current);
       }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
     };
-  }, [classId]);
+  }, [classId, streamRef]);
 
   const handleLoadedMetadata = () => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -135,75 +157,117 @@ const WebcamModal: React.FC<WebcamModalProps> = ({ classId, addImageToClass, onC
   };
 
   return (
-    <Modal open onClose={onClose} disableScrollLock>
-      {/* Backdrop */}
-      <div 
-        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center" 
-        onClick={onClose}
+  <Modal open onClose={onClose} disableScrollLock>
+    <div 
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" 
+      onClick={onClose}
+    >
+      <motion.div
+        onClick={e => e.stopPropagation()}
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ type: 'spring', damping: 20 }}
+        className="relative bg-gradient-to-br from-gray-900 to-gray-800 shadow-xl rounded-xl w-full max-w-4xl flex flex-col md:flex-row gap-6 border border-white/10 overflow-hidden"
       >
-        {/* Modal Content */}
-        <motion.div
-          onClick={e => e.stopPropagation()}
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.3 }}
-          className="relative bg-space-gray backdrop-blur-md p-6 rounded-2xl w-[95%] max-w-4xl flex flex-col md:flex-row gap-6"
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-1 rounded-full bg-white/5 hover:bg-white/10 transition-colors text-white/50 hover:text-white z-10"
         >
-          {/* Close Button */}
-          <IconButton
-            size="small"
-            onClick={onClose}
-            className="absolute top-4 right-4 text-space-white hover:text-glow bg-space-purple hover:bg-space-purple/90"
-          >
-            <CloseIcon />
-          </IconButton>
+          <X size={20} />
+        </button>
 
-          {/* Video & Controls */}
-          <div className="flex-1">
-            <Typography variant="h6" className="bg-space-black text-space-white text-glow p-2 mb-4 rounded">
-              Webcam
-            </Typography>
-            <video
-              ref={videoRef}
-              autoPlay
-              onLoadedMetadata={handleLoadedMetadata}
-              className="w-full rounded-lg"
-            />
-            <canvas ref={canvasRef} className="hidden" />
-            <Button
-              variant="contained"
-              className="mt-4 w-full uppercase tracking-wider transition-all duration-300 bg-space-purple hover:bg-space-purple/90 text-space-white button-glow"
-              onMouseDown={startRecording}
-              onMouseUp={stopRecording}
-              onMouseLeave={stopRecording}
-              onTouchStart={startRecording}
-              onTouchEnd={stopRecording}
-              onClick={captureImage}
-            >
-              Hold to Record
-            </Button>
+        <div className="flex-1 p-6">
+          <h2 className="text-xl font-bold text-white mb-4 text-center">
+            Webcam Live Preview
+          </h2>
+          
+          <div className="relative h-80 bg-black/30 rounded-lg border border-white/10 flex items-center justify-center overflow-hidden">
+            {loading && (
+              <div className="flex space-x-2">
+                {[0, 0.3, 0.6].map((delay) => (
+                  <motion.div
+                    key={delay}
+                    className="w-3 h-3 bg-blue-400 rounded-full"
+                    animate={{ scale: [1, 1.5, 1] }}
+                    transition={{
+                      repeat: Infinity,
+                      duration: 1.5,
+                      delay
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+            
+            {error && (
+              <div className="text-center p-4 bg-red-900/50 rounded-lg border border-red-500/50 text-red-100">
+                {error}
+              </div>
+            )}
+            
+            {!loading && !error && (
+              <video
+                ref={videoRef}
+                autoPlay
+                onLoadedMetadata={handleLoadedMetadata}
+                className="absolute inset-0 w-full h-full object-contain"
+              />
+            )}
           </div>
+          
+          <canvas ref={canvasRef} className="hidden" />
+          
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="mt-4 w-full py-3 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-medium uppercase tracking-wider shadow-md"
+            onMouseDown={startRecording}
+            onMouseUp={stopRecording}
+            onMouseLeave={stopRecording}
+            onTouchStart={startRecording}
+            onTouchEnd={stopRecording}
+            onClick={captureImage}
+          >
+            Hold to Record
+          </motion.button>
+        </div>
 
-          {/* Captured Images */}
-          <div className="flex-1 max-h-[400px] overflow-y-auto">
-            <Typography variant="h6" className="bg-space-black text-space-white text-glow p-2 mb-4 rounded">
-              Captured Images
-            </Typography>
-            <div className="flex flex-wrap gap-2">
+        <div className="flex-1 p-6 bg-white/5 border-l border-white/10">
+          <h2 className="text-xl font-bold text-white mb-4 text-center">
+            Captured Images <span className="text-blue-400">({capturedImages.length})</span>
+          </h2>
+          
+          {capturedImages.length > 0 ? (
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-80 overflow-y-auto pr-2">
               {capturedImages.map((src, i) => (
-                <img
+                <motion.div
                   key={i}
-                  src={src}
-                  alt={`Capture ${i + 1}`}
-                  className="w-20 h-15 object-cover rounded"
-                />
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="relative group"
+                >
+                  <img
+                    src={src}
+                    alt={`Capture ${i + 1}`}
+                    className="w-full h-20 object-cover rounded-lg border border-white/10 group-hover:border-blue-400 transition-colors"
+                  />
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-lg">
+                    <span className="text-xs font-medium text-white">#{i+1}</span>
+                  </div>
+                </motion.div>
               ))}
             </div>
-          </div>
-        </motion.div>
-      </div>
-    </Modal>
-  );
+          ) : (
+            <div className="h-40 flex items-center justify-center text-white/50 text-center">
+              <p>No images captured yet. <br /> Hold the button to record.</p>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  </Modal>
+);
 };
 
 interface ClassItem {
@@ -224,22 +288,22 @@ const ClassCard: React.FC<ClassCardProps> = ({ classItem, setClasses, addImageTo
   const [tempName, setTempName] = useState(classItem.name);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [isWebcamOpen, setIsWebcamOpen] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false); // deletion confirmation
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
+  const webcamStreamRef = useRef<MediaStream | null>(null);
 
   const handleDeleteClick = () => {
-    setConfirmOpen(true); // open confirm dialog
+    setConfirmOpen(true);
+    setAnchorEl(null);
   };
+
   const confirmDelete = () => {
     setClasses(prev => prev.filter(c => c.id !== classItem.id));
     setConfirmOpen(false);
   };
 
-  
-
   const handleSave = () => {
-    setClasses(prev => prev.map(c => c.id === classItem.id ? { ...c, name: tempName } : c));
+    setClasses(prev => prev.map(c => (c.id === classItem.id ? { ...c, name: tempName } : c)));
     setIsEditing(false);
   };
 
@@ -260,215 +324,250 @@ const ClassCard: React.FC<ClassCardProps> = ({ classItem, setClasses, addImageTo
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+    function handleWebcamClose() {
+        // stop everything immediately
+        if (webcamStreamRef.current) {
+          webcamStreamRef.current.getTracks().forEach(t => t.stop());
+          webcamStreamRef.current = null;
+        }
+      setIsWebcamOpen(false);
+  }
+
   return (
     <motion.div
-  initial={{ opacity: 0, y: 30 }}
-  animate={{ opacity: 1, y: 0 }}
-  whileHover={{ scale: 1.04 }}
-  transition={{ duration: 0.4 }}
->
-  <Card
-    elevation={0}
-    sx={{
-      background: 'linear-gradient(135deg, #2E8B57 0%, #98FF98 100%)',
-      borderRadius: '20px',
-      border: '1px solid rgba(255, 255, 255, 0.1)',
-      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
-    }}
-    className="mt-6 mb-6"
-  >
-    <div
-      className="backdrop-blur-md p-4 rounded-lg"
-      style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+      initial={{ opacity: 0, y: 30 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ scale: 1.02 }}
+      transition={{ duration: 0.4 }}
+      className="max-w-sm mx-auto"
     >
-      <CardHeader
-        title={isEditing ? (
-          <TextField
-            value={tempName}
-            onChange={e => setTempName(e.target.value)}
-            onBlur={handleSave}
+      <Card
+        elevation={0}
+        sx={{
+          backgroundColor: '#254E70',
+          borderRadius: '16px',
+          boxShadow: '0 0 10px rgba(0, 0, 0, 0.2)',
+          overflow: 'hidden',
+          position: 'relative',
+        }}
+        className="mt-6 mb-6"
+      >
+        {/* Floating Action Buttons */}
+        <div className="absolute top-4 right-4 flex flex-col gap-1">
+          <IconButton
             size="small"
-            className="bg-transparent text-white font-semibold"
-            InputProps={{ disableUnderline: true, sx: { color: '#f0e6ff' } }}
-          />
-        ) : (
-          <span className="text-white text-xl font-bold uppercase tracking-wide hover:text-[#ffebf0] transition-colors duration-200">
-            {tempName}
-          </span>
-        )}
-        subheader={
-          <Typography variant="body2" sx={{ color: '#d3cce3' }}>
-            {classItem.images.length} Samples
-          </Typography>
-        }
-        action={(
-          <div className="flex gap-2">
-            <IconButton sx={{ background: '#5c5470', '&:hover': { background: '#6e60a1' } }} onClick={() => setIsEditing(true)}>
-              <EditIcon sx={{ color: '#fff' }} />
-            </IconButton>
-            <IconButton sx={{ background: '#5c5470', '&:hover': { background: '#6e60a1' } }} onClick={e => setAnchorEl(e.currentTarget)}>
-              <MoreVertIcon sx={{ color: '#fff' }} />
-            </IconButton>
-            <Menu
-              anchorEl={anchorEl}
-              open={Boolean(anchorEl)}
-              onClose={() => setAnchorEl(null)}
-              PaperProps={{
-                sx: {
-                  background: 'rgba(30, 30, 60, 0.9)',
-                  borderRadius: '12px',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  color: '#fff',
-                }
-              }}
+            sx={{
+              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              '&:hover': { backgroundColor: 'rgba(255, 255, 255, 0.2)' },
+              width: 32,
+              height: 32,
+            }}
+            onClick={() => setIsEditing(true)}
+          >
+            <EditIcon sx={{ color: '#FFFFFF', fontSize: '16px' }} />
+          </IconButton>
+          <IconButton
+            size="small"
+            sx={{
+              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              '&:hover': { backgroundColor: 'rgba(255, 255, 255, 0.2)' },
+              width: 32,
+              height: 32,
+            }}
+            onClick={e => setAnchorEl(e.currentTarget)}
+          >
+            <MoreVertIcon sx={{ color: '#FFFFFF', fontSize: '16px' }} />
+          </IconButton>
+          <Menu
+            anchorEl={anchorEl}
+            open={Boolean(anchorEl)}
+            onClose={() => setAnchorEl(null)}
+            PaperProps={{
+              sx: {
+                backgroundColor: '#1A3A5A',
+                borderRadius: '8px',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+                color: '#FFFFFF',
+              },
+            }}
+          >
+            <MenuItem
+              onClick={handleDeleteClick}
+              sx={{ color: '#E57373', '&:hover': { backgroundColor: 'rgba(229, 115, 115, 0.1)' } }}
             >
-              <MenuItem
-                onClick={handleDeleteClick}
+              Delete Class
+            </MenuItem>
+          </Menu>
+        </div>
+
+        <CardHeader
+          title={
+            isEditing ? (
+              <TextField
+                value={tempName}
+                onChange={e => setTempName(e.target.value)}
+                onBlur={handleSave}
+                size="small"
+                variant="outlined"
                 sx={{
-                  color: '#ff6b6b',
-                  '&:hover': { background: 'rgba(255,107,107,0.2)' },
+                  '& .MuiOutlinedInput-root': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                    borderRadius: '4px',
+                    '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.2)' },
+                    '&:hover fieldset': { borderColor: '#4A90E2' },
+                  },
+                  '& .MuiInputBase-input': { color: '#FFFFFF', fontWeight: 'bold' },
+                }}
+              />
+            ) : (
+              <Typography
+                variant="h6"
+                sx={{
+                  color: '#FFFFFF',
+                  fontWeight: 'bold',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
                 }}
               >
-                Delete Class
-              </MenuItem>
-            </Menu>
-          </div>
-        )}
-        sx={{ p: 0, mb: 2 }}
-      />
+                {tempName}
+              </Typography>
+            )
+          }
+          subheader={
+            <Typography variant="body2" sx={{ color: '#AEDFF7' }}>
+              {classItem.images.length} Samples
+            </Typography>
+          }
+          sx={{ p: 2, pb: 1 }}
+        />
 
-      <CardContent sx={{ p: 0 }}>
-        <Typography variant="body2" sx={{ color: '#f8f8f8', mb: 1 }}>Add Image Samples:</Typography>
-        <div className="flex flex-wrap gap-3">
-          <Tooltip title="Capture Images with your Camera" arrow>
-            <span>
+        <CardContent sx={{ p: 2, pt: 0 }}>
+          {/* Captured Images Section */}
+          {classItem.images.length > 0 && (
+            <Box sx={{ maxHeight: 200, overflowY: 'auto', mt: 2 }}>
+              <Typography variant="body2" sx={{ color: '#AEDFF7', mb: 1 }}>
+                Captured Images
+              </Typography>
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
+                {classItem.images.map((src, idx) => (
+                  <Box key={idx} sx={{ position: 'relative', aspectRatio: '1 / 1' }} className="image-container">
+                    <motion.img
+                      src={src}
+                      alt={`Image ${idx + 1}`}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      //whileHover={{ scale: 1.05 }}
+                      transition={{ duration: 0.3 }}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }}
+                    />
+                    <IconButton
+                      size="small"
+                      onClick={() => removeImageFromClass(classItem.id, idx)}
+                      sx={{
+                        position: 'absolute',
+                        top: 4,
+                        right: 4,
+                        backgroundColor: '#EF3E36',
+                        opacity: 1,
+                        '&:hover': { backgroundColor: '#EF3E36', opacity:1 },
+                        
+                      }}
+                      className="delete-icon"
+                    >
+                      <DeleteIcon sx={{ color: '#FFFFFF', fontSize: '16px' }} />
+                    </IconButton>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          )}
+
+          {/* Add Image Samples Buttons */}
+          <div className="flex flex-wrap justify-between mt-4 gap-2">
+            <Tooltip title="Capture Images with your Camera" arrow>
               <Button
-                  variant="contained"
-                  startIcon={<CameraAltIcon />}
-                  onClick={() => setIsWebcamOpen(true)}
-                  sx={{
-                    background: 'linear-gradient(45deg, #7b5aff, #8e8ffa)',
-                    color: '#fff',
-                    borderRadius: '8px',
-                    '&:hover': {
-                      background: 'linear-gradient(45deg, #6f4eff, #8486f3)',
-                    },
-                  }}
-                >
-                  Webcam
-                </Button>
-              </span>
-              </Tooltip>
+                variant="contained"
+                startIcon={<CameraAltIcon />}
+                onClick={() => setIsWebcamOpen(true)}
+                sx={{
+                  backgroundColor: '#4A90E2',
+                  color: '#FFFFFF',
+                  borderRadius: '4px',
+                  px: 2,
+                  py: 1,
+                  flex: '1 1 48%',
+                  '&:hover': {
+                    backgroundColor: '#357ABD',
+                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                  },
+                }}
+              >
+                Webcam
+              </Button>
+            </Tooltip>
 
-          <Tooltip title="Upload Images from your gallery" arrow>
-            <span>
+            <Tooltip title="Upload Images from your gallery" arrow>
               <Button
                 variant="contained"
                 startIcon={<UploadIcon />}
                 onClick={() => fileInputRef.current?.click()}
                 sx={{
-                  background: 'linear-gradient(45deg, #7b5aff, #8e8ffa)',
-                  color: '#fff',
-                  borderRadius: '8px',
+                  backgroundColor: '#4A90E2',
+                  color: '#FFFFFF',
+                  borderRadius: '4px',
+                  px: 2,
+                  py: 1,
+                  flex: '1 1 48%',
                   '&:hover': {
-                    background: 'linear-gradient(45deg, #6f4eff, #8486f3)',
+                    backgroundColor: '#357ABD',
+                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
                   },
                 }}
               >
                 Upload
               </Button>
-            </span>
-          </Tooltip>
+            </Tooltip>
 
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            ref={fileInputRef}
-            className="hidden"
-            onChange={handleUpload}
-          />
-        </div>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              ref={fileInputRef}
+              className="hidden"
+              onChange={handleUpload}
+            />
+          </div>
+        </CardContent>
+      </Card>
 
-       {classItem.images.length > 0 && (
-  <div className="mt-6 w-full overflow-x-auto">
-    <div className="flex flex-nowrap space-x-3">
-      {classItem.images.map((src, idx) => (
-        <motion.div
-          key={idx}
-          initial={{ scale: 0.9 }}
-          animate={{ scale: 1 }}
-          whileHover={{
-            scale: 1.05,
-            boxShadow: '0 0 16px rgba(255,255,255,0.2)',
-          }}
-          transition={{ delay: idx * 0.05 }}
-          className="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden"
-        >
-          <img
-            src={src}
-            alt={`Class ${classItem.id} img ${idx + 1}`}
-            className="w-full h-full object-cover"
-          />
-          <IconButton
-            size="small"
-            onClick={() => removeImageFromClass(classItem.id, idx)}
-            sx={{
-              position: 'absolute',
-              top: 4,
-              right: 4,
-              background: '#ff4c4c',
-              '&:hover': { background: '#ff1e1e' },
-            }}
-          >
-            <DeleteIcon fontSize="small" sx={{ color: '#fff' }} />
-          </IconButton>
-        </motion.div>
-      ))}
-    </div>
-  </div>
-)}
+      {isWebcamOpen && (
+            <WebcamModal
+              classId={classItem.id}
+              addImageToClass={addImageToClass}
+              onClose={handleWebcamClose}
+              streamRef={webcamStreamRef}
+            />
+          
+      )}
+    
 
-      </CardContent>
-    </div>
-
-    {isWebcamOpen && (
-      <div
-        className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
-        onClick={() => setIsWebcamOpen(false)}
-      >
-        <div onClick={e => e.stopPropagation()} className="relative">
-          <IconButton
-            onClick={() => setIsWebcamOpen(false)}
-            sx={{
-              position: 'absolute',
-              top: -10,
-              right: -10,
-              background: '#5c5470',
-              '&:hover': { background: '#6e60a1' },
-            }}
-          >
-            <CloseIcon sx={{ color: '#fff' }} />
-          </IconButton>
-          <WebcamModal
-            classId={classItem.id}
-            addImageToClass={addImageToClass}
-            onClose={() => setIsWebcamOpen(false)}
-          />
-        </div>
-      </div>
-    )}
-  </Card>
-  <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
-        <DialogTitle>Confirm Delete</DialogTitle>
-        <DialogContent>Are you sure you want to delete class "{classItem.name}"?</DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
-          <Button onClick={confirmDelete} color="error">Delete</Button>
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+        <DialogTitle sx={{ color: '#FFFFFF', backgroundColor: '#254E70' }}>
+          Confirm Delete
+        </DialogTitle>
+        <DialogContent sx={{ color: '#AEDFF7', backgroundColor: '#1A3A5A' }}>
+          Are you sure you want to delete class "{classItem.name}"?
+        </DialogContent>
+        <DialogActions sx={{ backgroundColor: '#1A3A5A' }}>
+          <Button onClick={() => setConfirmOpen(false)} sx={{ color: '#AEDFF7' }}>
+            Cancel
+          </Button>
+          <Button onClick={confirmDelete} sx={{ color: '#E57373' }}>
+            Delete
+          </Button>
         </DialogActions>
-    </Dialog>
-</motion.div>
-
+      </Dialog>
+    </motion.div>
   );
 };
 
@@ -501,9 +600,10 @@ interface TrainingCardProps {
   truncatedNet: tf.LayersModel;
   headModelRef: MutableRefObject<tf.LayersModel | null>;
   onTrainingComplete: () => void;
+  isTrained: boolean; // Added to track training state
 }
 
-const TrainingCard: React.FC<TrainingCardProps> = ({ classes, truncatedNet, headModelRef,onTrainingComplete }) => {
+const TrainingCard: React.FC<TrainingCardProps> = ({ classes, truncatedNet, headModelRef, onTrainingComplete, isTrained }) => {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [epochs, setEpochs] = useState(50);
   const [batchSize, setBatchSize] = useState(16);
@@ -513,15 +613,23 @@ const TrainingCard: React.FC<TrainingCardProps> = ({ classes, truncatedNet, head
   const [currentEpoch, setCurrentEpoch] = useState(0);
   const [trainAcc, setTrainAcc] = useState(0);
   const [valAcc, setValAcc] = useState(0);
+  const [showTrainingModal, setShowTrainingModal] = useState(false);
+  const [showRetrainModal, setShowRetrainModal] = useState(false);
 
-    // Check at least one image in at least two classes before enabling train
   const canTrain = classes.filter(c => c.images.length > 0).length >= 2;
+
+  useEffect(() => {
+    if (showTrainingModal) {
+      const timer = setTimeout(() => setShowTrainingModal(false), 20000);
+      return () => clearTimeout(timer);
+    }
+  }, [showTrainingModal]);
 
   const trainModel = async () => {
     if (!truncatedNet || classes.length === 0) return;
     setIsTraining(true);
     setProgress(0);
-    
+    setShowTrainingModal(true);
 
     const numClasses = classes.length;
     headModelRef.current = createHeadModel(numClasses, learningRate);
@@ -532,7 +640,7 @@ const TrainingCard: React.FC<TrainingCardProps> = ({ classes, truncatedNet, head
       for (const src of classes[ci].images) {
         const img = new Image();
         img.src = src;
-        await new Promise<void>(res => { 
+        await new Promise<void>(res => {
           img.onload = () => res();
         });
         const embed = tf.tidy(() => {
@@ -569,9 +677,9 @@ const TrainingCard: React.FC<TrainingCardProps> = ({ classes, truncatedNet, head
             setTrainAcc(logs.acc ?? 0);
             setValAcc((logs.val_acc as number) ?? 0);
             await tf.nextFrame();
-          }
-        }
-      ]
+          },
+        },
+      ],
     });
 
     embeddings.forEach(e => e.dispose());
@@ -579,209 +687,496 @@ const TrainingCard: React.FC<TrainingCardProps> = ({ classes, truncatedNet, head
     ys.dispose();
 
     setProgress(100);
-    setTimeout(() => setIsTraining(false), 500);
     setIsTraining(false);
-    setProgress(100);
-    onTrainingComplete(); // notify parent
-    
+    setShowTrainingModal(false);
+    onTrainingComplete();
   };
-return (
-  <motion.div
-    initial={{ opacity: 0, y: 10 }}
-    animate={{ opacity: 1, y: 0 }}
-    whileHover={{ scale: 1.02 }}
-    transition={{ duration: 0.4 }}
-  >
-    <Card
-      elevation={0}
-      sx={{
-        width: 300,
-        borderRadius: '12px',
-        border: '1px solid rgba(255,255,255,0.1)',
-        background: 'linear-gradient(135deg, #2E8B57, #98FF98)',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
-      }}
-      className="mt-4 mb-4 overflow-hidden"
+
+  const handleTrainClick = () => {
+    if (isTrained) {
+      setShowRetrainModal(true);
+    } else {
+      trainModel();
+    }
+  };
+
+  const handleRetrainConfirm = () => {
+    setShowRetrainModal(false);
+    trainModel();
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ scale: 1.02 }}
+      transition={{ duration: 0.4 }}
+      className="max-w-sm mx-auto"
     >
-      <div
-        className="backdrop-blur p-2"
-        style={{ background: 'rgba(255,255,255,0.06)' }}
+      <Card
+        elevation={0}
+        sx={{
+          width: 250,
+          borderRadius: '16px',
+          backgroundColor: '#254E70',
+          boxShadow: '0 0 10px rgba(0, 0, 0, 0.2)',
+          overflow: 'hidden',
+        }}
+        className="mt-4 mb-4"
       >
         <CardHeader
           title={
-            <span className="text-white text-base font-semibold uppercase">
+            <Typography
+              variant="h6"
+              sx={{
+                color: '#FFFFFF',
+                fontWeight: 'bold',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}
+            >
               Training
-            </span>
+            </Typography>
           }
-          sx={{
-            p: 1,
-            mb: 1,
-            background: 'rgba(255,255,255,0.12)',
-            borderRadius: '8px 8px 0 0',
-          }}
+          sx={{ p: 2, pb: 1 }}
         />
 
-        <CardContent sx={{ p: 1 }}>
+        <CardContent sx={{ p: 2, pt: 0 }}>
           <Tooltip
             title={
-              (!truncatedNet)
-                ? 'Load the base model first'
+              !truncatedNet
+                ? 'You must load the base machine learning model before training can begin.'
                 : isTraining
-                  ? 'Training in progress'
-                  : !canTrain
-                    ? 'Add at least two class with examples'
-                    : ''
+                ? 'Training is currently in progress. Please wait until it completes.'
+                : !canTrain
+                ? 'You need at least two classes with image examples to start training.'
+                : 'Click to start training the model with your provided image classes.'
             }
             arrow
-            disableHoverListener={
-              Boolean(truncatedNet && !isTraining && canTrain)
-            }
+            disableHoverListener={Boolean(truncatedNet && !isTraining && canTrain)}
           >
             <span>
               <Button
                 variant="contained"
                 fullWidth
-                size="small"
                 disabled={!truncatedNet || isTraining || !canTrain}
-                onClick={trainModel}
+                onClick={handleTrainClick}
                 sx={{
-                  background: 'linear-gradient(45deg, #7b5aff, #8e8ffa)',
+                  backgroundColor: '#4A90E2',
+                  color: '#FFFFFF',
+                  borderRadius: '4px',
+                  py: 1,
                   textTransform: 'none',
-                  borderRadius: '6px',
-                  py: 0.75,
-                  boxShadow: '0 2px 8px rgba(123,90,255,0.3)',
                   '&:hover': {
-                    transform: 'translateY(-1px)',
-                    boxShadow: '0 4px 12px rgba(123,90,255,0.5)',
+                    backgroundColor: '#357ABD',
+                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
                   },
-                  // disabled state overrides
                   '&.Mui-disabled': {
-                    background: 'rgba(200,200,200,0.5)',
-                    boxShadow: 'none',
-                    color: 'rgba(0, 0, 0, 0.26)',   // ensure the text is faded
+                    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                    color: 'rgba(255, 255, 255, 0.3)',
                   },
                 }}
               >
-                {isTraining ? 'Training…' : 'Train'}
+                {isTraining ? 'Training…' : isTrained ? 'Retrain' : 'Train'}
               </Button>
             </span>
           </Tooltip>
 
-
           {isTraining && (
-            <>
+            <Box sx={{ mt: 2 }}>
               <LinearProgress
                 variant="determinate"
                 value={progress}
-                sx={{ mt: 1, height: 6, borderRadius: 3 }}
+                sx={{
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  '& .MuiLinearProgress-bar': { backgroundColor: '#4A90E2' },
+                }}
               />
-              <Typography
-                variant="caption"
-                className="block text-center text-white mt-1"
-              >
-                {currentEpoch}/{epochs} • {((trainAcc*100).toFixed(0))}% / {((valAcc*100).toFixed(0))}%
-              </Typography>
-            </>
+              <Box sx={{ mt: 1, textAlign: 'center' }}>
+                <motion.div
+                  key={currentEpoch}
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <Typography
+                    variant="caption"
+                    sx={{ color: '#AEDFF7', display: 'block' }}
+                  >
+                    Epoch {currentEpoch}/{epochs}
+                  </Typography>
+                  <Tooltip
+                    title={trainAcc === 1 ? '100% train accuracy might mean overfitting. Try adding more diverse images or tweaking the model settings.' : ''}
+                    arrow
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: trainAcc >= 0.8 ? '#4CAF50' : trainAcc >= 0.6 ? '#FFCA28' : '#E57373',
+                        display: 'block',
+                      }}
+                    >
+                      Train Accuracy: {(trainAcc * 100).toFixed(1)}%
+                    </Typography>
+                  </Tooltip>
+                  <Tooltip
+                    title={valAcc === 1 ? '100% validation accuracy could indicate overfitting or too little validation data. Consider increasing your dataset.' : ''}
+                    arrow
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: valAcc >= 0.8 ? '#4CAF50' : valAcc >= 0.6 ? '#FFCA28' : '#E57373',
+                        display: 'block',
+                      }}
+                    >
+                      Validation Accuracy: {(valAcc * 100).toFixed(1)}%
+                    </Typography>
+                  </Tooltip>
+                </motion.div>
+                <Typography
+                  variant="caption"
+                  sx={{ color: '#AEDFF7', display: 'block', mt: 1, fontStyle: 'italic' }}
+                >
+                  Train accuracy reflects fit to training data; validation accuracy shows generalization. Very high values might suggest overfitting.
+                </Typography>
+              </Box>
+            </Box>
           )}
 
           <Button
             variant="outlined"
             fullWidth
-            size="small"
-            endIcon={advancedOpen ? <ExpandLessIcon fontSize="small"/> : <ExpandMoreIcon fontSize="small"/>}
+            endIcon={advancedOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
             onClick={() => setAdvancedOpen(o => !o)}
             sx={{
-              mt: 1,
-              borderRadius: '6px',
+              mt: 2,
+              borderRadius: '4px',
+              borderColor: 'rgba(255, 255, 255, 0.2)',
+              color: '#FFFFFF',
               textTransform: 'none',
-              borderColor: '#fff',
-              fontSize: '0.75rem',
-              py: 0.75,
-              boxShadow: '0 0 8px rgba(255,255,255,0.1)',
-              '&:hover': { transform: 'translateY(-1px)' },
+              py: 1,
+              '&:hover': {
+                borderColor: '#4A90E2',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+              },
             }}
           >
-            Advanced
+            Advanced Options
           </Button>
 
           <Collapse in={advancedOpen}>
-            <div
-              className="mt-2 p-2 rounded"
-              style={{ background: 'rgba(255,255,255,0.06)' }}
+            <Box
+              sx={{
+                mt: 2,
+                p: 2,
+                borderRadius: '4px',
+                backgroundColor: '#1A3A5A',
+              }}
             >
-              <div className="flex items-center mb-2 space-x-2 text-white text-sm">
-                <Typography className="w-16">Epochs:</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1 }}>
+                <Typography sx={{ color: '#AEDFF7', width: 80, fontSize: '0.875rem' }}>
+                  Epochs:
+                </Typography>
                 <TextField
                   type="number"
                   value={epochs}
                   onChange={e => setEpochs(+e.target.value)}
                   size="small"
-                  sx={{ flex: 1, '& .MuiInputBase-input': { py: 0.25, fontSize: '0.75rem' } }}
-                  InputProps={{ disableUnderline: true }}
+                  sx={{
+                    flex: 1,
+                    '& .MuiInputBase-input': { color: '#FFFFFF', fontSize: '0.875rem', py: 0.5 },
+                    '& .MuiOutlinedInput-root': {
+                      '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.2)' },
+                      '&:hover fieldset': { borderColor: '#4A90E2' },
+                    },
+                  }}
+                  inputProps={{ min: 1 }}
                 />
-                <Tooltip title="Full passes">
-                  <HelpOutlineIcon fontSize="small" className="text-white"/>
+                <Tooltip
+                  title="Epochs define how many times the model sees the entire dataset during training. Higher values can improve accuracy but take longer and may overfit if too high. Default: 50."
+                  arrow
+                >
+                  <HelpOutlineIcon sx={{ color: '#AEDFF7', fontSize: '16px' }} />
                 </Tooltip>
-              </div>
+              </Box>
 
-              <div className="flex items-center mb-2 space-x-2 text-white text-sm">
-                <Typography className="w-16">Batch:</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1 }}>
+                <Typography sx={{ color: '#AEDFF7', width: 80, fontSize: '0.875rem' }}>
+                  Batch Size:
+                </Typography>
                 <TextField
                   select
                   value={batchSize}
                   onChange={e => setBatchSize(+e.target.value)}
                   size="small"
-                  sx={{ width: 80, '& .MuiInputBase-input': { py: 0.25, fontSize: '0.75rem' } }}
-                  InputProps={{ disableUnderline: true }}
+                  sx={{
+                    flex: 1,
+                    '& .MuiInputBase-input': { color: '#FFFFFF', fontSize: '0.875rem', py: 0.5 },
+                    '& .MuiOutlinedInput-root': {
+                      '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.2)' },
+                      '&:hover fieldset': { borderColor: '#4A90E2' },
+                    },
+                  }}
                 >
-                  {[8,16,32,64].map(n => <MenuItem key={n} value={n}>{n}</MenuItem>)}
+                  {[8, 16, 32, 64].map(n => (
+                    <MenuItem key={n} value={n}>
+                      {n}
+                    </MenuItem>
+                  ))}
                 </TextField>
-                <Tooltip title="Samples per update">
-                  <HelpOutlineIcon fontSize="small" className="text-white"/>
+                <Tooltip
+                  title="Batch size is the number of images processed before the model updates its weights. Smaller batches use less memory but may be less stable. Default: 16."
+                  arrow
+                >
+                  <HelpOutlineIcon sx={{ color: '#AEDFF7', fontSize: '16px' }} />
                 </Tooltip>
-              </div>
+              </Box>
 
-              <div className="flex items-center space-x-2 text-white text-sm">
-                <Typography className="w-16">LR:</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography sx={{ color: '#AEDFF7', width: 80, fontSize: '0.875rem' }}>
+                  Learning Rate:
+                </Typography>
                 <TextField
                   type="number"
                   value={learningRate}
                   onChange={e => setLearningRate(+e.target.value)}
                   size="small"
-                  sx={{ width: 100, '& .MuiInputBase-input': { py: 0.25, fontSize: '0.75rem' } }}
-                  inputProps={{ step: 0.0001 }}
-                  InputProps={{ disableUnderline: true }}
+                  sx={{
+                    flex: 1,
+                    minWidth: '100px', // Ensures visibility of small values
+                    '& .MuiInputBase-input': { color: '#FFFFFF', fontSize: '0.875rem', py: 0.5 },
+                    '& .MuiOutlinedInput-root': {
+                      '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.2)' },
+                      '&:hover fieldset': { borderColor: '#4A90E2' },
+                    },
+                  }}
+                  inputProps={{ step: 0.0001, min: 0 }}
                 />
-                <Tooltip title="Step size">
-                  <HelpOutlineIcon fontSize="small" className="text-white"/>
+                <Tooltip
+                  title="Learning rate controls how much the model adjusts its weights per update. Lower values are slower but more precise; higher values are faster but may overshoot. Default: 0.001."
+                  arrow
+                >
+                  <HelpOutlineIcon sx={{ color: '#AEDFF7', fontSize: '16px' }} />
                 </Tooltip>
-              </div>
-            </div>
+              </Box>
+            </Box>
           </Collapse>
         </CardContent>
-      </div>
-    </Card>
-  </motion.div>
-);
+      </Card>
+
+      <Modal
+        open={showTrainingModal}
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'flex-start',
+          mt: '30px',
+        }}
+      >
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.3 }}
+        >
+          <Box
+            sx={{
+              backgroundColor: '#1A3A5A',
+              borderRadius: '8px',
+              p: 2,
+              maxWidth: 400,
+              width: '90%',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+              color: '#FFFFFF',
+              position: 'relative',
+            }}
+          >
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+              <Typography variant="h6" sx={{ fontWeight: 'bold', fontSize: '1rem' }}>
+                Training Started
+              </Typography>
+              <IconButton
+                onClick={() => setShowTrainingModal(false)}
+                sx={{ color: '#E57373', p: 0.5 }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Box>
+            <Typography sx={{ color: '#AEDFF7', fontSize: '0.875rem' }}>
+              Training may take a few minutes depending on your images and settings. Please stay on this tab, as switching tabs will stop the training process.
+            </Typography>
+          </Box>
+        </motion.div>
+      </Modal>
+
+      <Modal
+        open={showRetrainModal}
+        onClose={() => setShowRetrainModal(false)}
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.8 }}
+          transition={{ duration: 0.3 }}
+        >
+          <Box
+            sx={{
+              backgroundColor: '#1A3A5A',
+              borderRadius: '8px',
+              p: 3,
+              maxWidth: 400,
+              width: '90%',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+              color: '#FFFFFF',
+            }}
+          >
+            <Typography variant="h6" sx={{ fontWeight: 'bold', fontSize: '1rem', mb: 2 }}>
+              Retrain Model?
+            </Typography>
+            <Typography sx={{ color: '#AEDFF7', fontSize: '0.875rem', mb: 3 }}>
+              Your model is already trained. Retraining may improve accuracy but will take additional time depending on your settings.
+            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+              <Button
+                onClick={() => setShowRetrainModal(false)}
+                sx={{
+                  color: '#E57373',
+                  fontSize: '0.875rem',
+                  textTransform: 'none',
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleRetrainConfirm}
+                sx={{
+                  backgroundColor: '#4A90E2',
+                  color: '#FFFFFF',
+                  borderRadius: '4px',
+                  py: 1,
+                  px: 2,
+                  fontSize: '0.875rem',
+                  textTransform: 'none',
+                  '&:hover': { backgroundColor: '#357ABD' },
+                }}
+              >
+                Retrain
+              </Button>
+            </Box>
+          </Box>
+        </motion.div>
+      </Modal>
+    </motion.div>
+  );
 };
 
+
+
 interface PreviewCardProps {
-  classes: ClassItem[];
-  truncatedNet: tf.LayersModel;
-  headModelRef: MutableRefObject<tf.LayersModel | null>;
+  classes: { name: string }[];
+  truncatedNet: tf.LayersModel | null;
+  headModelRef: React.MutableRefObject<tf.LayersModel | null>;
   isTrained: boolean;
 }
 
-const PreviewCard: React.FC<PreviewCardProps> = ({ classes, truncatedNet, headModelRef,isTrained }) => {
+
+const PreviewCard: React.FC<PreviewCardProps> = ({ classes, truncatedNet, headModelRef, isTrained }) => {
   const [inputOn, setInputOn] = useState(false);
   const [source, setSource] = useState<'Webcam' | 'File'>('Webcam');
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
-  const [results, setResults] = useState<{ label: string; confidence: number; }[]>([]);
+  const [results, setResults] = useState<{ label: string; confidence: number }[]>([]);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [ setSelectedFormat] = useState<'TF.js' | 'TF' | 'TF Lite' | null>('TF.js');
+  const [isExporting, setIsExporting] = useState(false);
+  const [showCodeSnippet, setShowCodeSnippet] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [isSnackbarOpen, setIsSnackbarOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const intervalRef = useRef<number | null>(null);
 
-  const runPredict = async () => {
+  const codeSnippet = `
+<div>Teachable Machine Image Model</div>
+<button type="button" onclick="init()">Start</button>
+<div id="webcam-container"></div>
+<div id="label-container"></div>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+<script type="text/javascript">
+    const modelPath = "path/to/your/model/";
+    let model, webcam, maxPredictions;
+    
+    async function init() {
+        const modelURL = modelPath + "model.json";
+        const metadataURL = modelPath + "metadata.json";
+        
+        model = await tf.loadLayersModel(modelURL);
+        const metadata = await (await fetch(metadataURL)).json();
+        
+        maxPredictions = metadata.classes.length;
+        
+        webcam = new tmImage.Webcam(200, 200, true);
+        await webcam.setup();
+        await webcam.play();
+        
+        document.getElementById("webcam-container").appendChild(webcam.canvas);
+        
+        const labelContainer = document.getElementById("label-container");
+        labelContainer.innerHTML = '';
+        metadata.classes.forEach((className) => {
+            labelContainer.appendChild(document.createElement("div"));
+        });
+        
+        predictLoop();
+    }
+
+    async function predictLoop() {
+        webcam.update();
+        await predict();
+        window.requestAnimationFrame(predictLoop);
+    }
+
+    async function predict() {
+        const prediction = await model.predict(webcam.canvas);
+        const values = await prediction.data();
+        prediction.dispose();
+        
+        const labelContainer = document.getElementById("label-container");
+        for (let i = 0; i < maxPredictions; i++) {
+            const classPrediction = 
+                \`\${metadata.classes[i]}: \${values[i].toFixed(2)}\`;
+            labelContainer.childNodes[i].innerHTML = classPrediction;
+        }
+    }
+</script>
+  `.trim();
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(codeSnippet);
+    setIsSnackbarOpen(true);
+  };
+
+  const handleSnackbarClose = () => {
+    setIsSnackbarOpen(false);
+  };
+
+  const fullModel = React.useMemo(() => {
+    if (!truncatedNet || !headModelRef.current) return null;
+    const model = tf.sequential();
+    model.add(truncatedNet);
+    model.add(headModelRef.current);
+    return model;
+  }, [truncatedNet, headModelRef]);
+
+  const runPredict = useCallback(async () => {
     if (!truncatedNet || !headModelRef.current) return;
     let embedding: tf.Tensor | undefined;
     if (source === 'Webcam') {
@@ -794,10 +1189,9 @@ const PreviewCard: React.FC<PreviewCardProps> = ({ classes, truncatedNet, headMo
         return truncatedNet.predict(resized) as tf.Tensor;
       });
     } else if (previewSrc) {
-      const img = new Image(); img.src = previewSrc;
-      await new Promise<void>(res => { 
-        img.onload = () => res();
-      });
+      const img = new Image();
+      img.src = previewSrc;
+      await new Promise<void>(res => { img.onload = () => res(); });
       embedding = tf.tidy(() => {
         const imgTensor = tf.browser.fromPixels(img).toFloat().div(255);
         const batched = imgTensor.expandDims(0);
@@ -815,12 +1209,17 @@ const PreviewCard: React.FC<PreviewCardProps> = ({ classes, truncatedNet, headMo
     }));
     setResults(classesWithConfidences);
     tf.dispose([embedding, prediction]);
-  };
+  }, [previewSrc, source, truncatedNet, headModelRef, classes]);
 
   useEffect(() => {
-    if (intervalRef.current !== null) clearInterval(intervalRef.current);
+    if (intervalRef.current !== null) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    
     if (videoRef.current?.srcObject) {
       (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+      videoRef.current.srcObject = null;
     }
     setResults([]);
     setPreviewSrc(null);
@@ -835,10 +1234,9 @@ const PreviewCard: React.FC<PreviewCardProps> = ({ classes, truncatedNet, headMo
             videoRef.current.play();
           }
         })
-        .catch(err => console.error('webcam error:', err));
+        .catch(err => console.error('Webcam error:', err));
       intervalRef.current = window.setInterval(runPredict, 1000);
-    }
-    if (source === 'File' && inputOn && previewSrc) {
+    } else if (source === 'File' && previewSrc) {
       runPredict();
     }
 
@@ -846,9 +1244,10 @@ const PreviewCard: React.FC<PreviewCardProps> = ({ classes, truncatedNet, headMo
       if (intervalRef.current !== null) clearInterval(intervalRef.current);
       if (videoRef.current?.srcObject) {
         (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+        videoRef.current.srcObject = null;
       }
     };
-  }, [previewSrc, source, inputOn, truncatedNet, headModelRef, classes]);
+  }, [previewSrc, source, inputOn, runPredict]);
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -862,200 +1261,426 @@ const PreviewCard: React.FC<PreviewCardProps> = ({ classes, truncatedNet, headMo
     reader.readAsDataURL(file);
   };
 
- return (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    whileHover={{ scale: 1.04 }}
-    transition={{ duration: 0.5 }}
-  >
-    <Card
-      elevation={0}
-      sx={{
-        width: 400,
-        background: 'linear-gradient(135deg, #2E8B57 0%, #98FF98 100%)',
-        borderRadius: '20px',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
-      }}
-      className="mt-6 mb-6 overflow-hidden"
+  const handleExportClick = () => {
+    setIsExportModalOpen(true);
+    setShowCodeSnippet(false);
+    setExportError(null);
+    //setSelectedFormat('TF.js');
+  };
+
+// Updated handleExport function
+const handleExport = async () => {
+  if (!fullModel) {
+    setExportError('Model is not trained yet. Please train the model first.');
+    return;
+  }
+  setIsExporting(true);
+  setExportError(null);
+
+  try {
+    const metadata = {
+      classes: classes.map(c => c.name),
+      inputShape: [224, 224, 3],
+      outputShape: [classes.length],
+      created: new Date().toISOString(),
+    };
+
+    await fullModel.save(tf.io.withSaveHandler(async (artifacts) => {
+      const zip = new JSZip();
+      zip.file("model.json", JSON.stringify(artifacts.modelTopology));
+      if (artifacts.weightData) {
+        let weightsBuffer: ArrayBuffer;
+        if (Array.isArray(artifacts.weightData)) {
+          const totalLength = artifacts.weightData.reduce((acc, buf) => acc + buf.byteLength, 0);
+          const temp = new Uint8Array(totalLength);
+          let offset = 0;
+          for (const buf of artifacts.weightData) {
+            temp.set(new Uint8Array(buf), offset);
+            offset += buf.byteLength;
+          }
+          weightsBuffer = temp.buffer;
+        } else {
+          weightsBuffer = artifacts.weightData;
+        }
+        zip.file("weights.bin", weightsBuffer);
+      }
+      zip.file("metadata.json", JSON.stringify(metadata, null, 2));
+      const content = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "teachable-model.zip";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setShowCodeSnippet(true);
+      return {
+        modelArtifactsInfo: {
+          dateSaved: new Date(),
+          modelTopologyType: 'JSON',
+        },
+      };
+    }));
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : 'Export failed';
+    setExportError(errorMsg);
+  } finally {
+    setIsExporting(false);
+  }
+};
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ scale: 1.02 }}
+      transition={{ duration: 0.4 }}
+      className="max-w-md mx-auto"
     >
-      <div
-        className="backdrop-blur-md p-4"
-        style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+      <Card
+        elevation={0}
+        sx={{
+          width:400,
+          backgroundColor: '#254E70',
+          borderRadius: '16px',
+          boxShadow: '0 0 10px rgba(0, 0, 0, 0.2)',
+          overflow: 'hidden',
+        }}
+        className="mt-4 mb-4"
       >
         <CardHeader
           title={
-            <span className="text-white text-xl font-bold uppercase tracking-wide hover:text-[#ffebf0] transition-colors duration-200">
+            <Typography
+              variant="h6"
+              sx={{
+                color: '#FFFFFF',
+                fontWeight: 'bold',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}
+            >
               Preview
-            </span>
+            </Typography>
           }
-          sx={{
-            p: 2,
-            mb: 2,
-            background: 'rgba(255,255,255,0.1)',
-            borderRadius: '12px 12px 0 0',
-          }}
+          sx={{ p: 2, pb: 1 }}
         />
-
-        <CardContent sx={{ p: 0 }}>
-          <div className="px-4">
-            <Tooltip
-                title={!isTrained ? 'Train model first' : ''}
-                arrow
-                disableHoverListener={isTrained}  // only listen when disabled
+        <CardContent sx={{ p: 3, pt: 0 }}>
+          <Tooltip
+            title={
+              !isTrained
+                ? "The Export Model button is disabled because the model has not been trained yet. To enable it, go to the Training section, ensure you have at least two classes with images, and click 'Train'. Training teaches the model to recognize your classes. Once trained, you can export the model to use in your projects (e.g., web apps, Python, or mobile devices)."
+                : "Export your trained model to use it in your projects, such as web applications (TensorFlow.js), Python projects (TensorFlow), or mobile devices (TensorFlow Lite)."
+            }
+            arrow
+            disableHoverListener={isTrained}
+          >
+            <span>
+              <Button
+                variant="contained"
+                fullWidth
+                disabled={!isTrained}
+                onClick={handleExportClick}
+                startIcon={!isTrained ? <LockIcon /> : null}
+                sx={{
+                  mb: 3,
+                  backgroundColor: '#4A90E2',
+                  color: '#FFFFFF',
+                  borderRadius: '4px',
+                  textTransform: 'none',
+                  py: 1.5,
+                  fontSize: '1rem',
+                  '&:hover': {
+                    backgroundColor: '#357ABD',
+                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                  },
+                  '&.Mui-disabled': {
+                    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                    color: 'rgba(255, 255, 255, 0.3)',
+                  },
+                }}
               >
-                {/* span needed so Tooltip can attach even when child is disabled */}
-                <span>
-                  <Button
-                    variant="outlined"
-                    fullWidth
-                    disabled={!isTrained}
-                    onClick={() => alert('Download Model (not yet implemented)')}
-                    sx={{
-                      mb: 2,
-                      borderRadius: '8px',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.1em',
-                      transition: 'all 0.3s ease',
-                      // enabled state
-                      borderColor: '#fff',
-                      color: '#fff',
-                      background: 'linear-gradient(45deg, #1c0038 0%, #2e0051 100%)',
-                      boxShadow: '0 0 10px rgba(255,255,255,0.1)',
-                      '&:hover': {
-                        background: '#fff',
-                        color: '#1b0031',
-                        boxShadow: '0 0 15px rgba(255,255,255,0.3)',
-                        transform: 'translateY(-1px)',
-                      },
-                      '&:active': {
-                        transform: 'translateY(0)',
-                      },
-                      // disabled state
-                      '&.Mui-disabled': {
-                        background: 'rgba(0, 0, 0, 0.12)',    
-                        borderColor: 'rgba(0, 0, 0, 0.12)',  
-                        color: 'rgba(0, 0, 0, 0.26)',        
-                        boxShadow: 'none',                   
-                      },
-                    }}
+                Export Model
+              </Button>
+            </span>
+          </Tooltip>
+
+          
+          <Modal
+              open={isExportModalOpen}
+              onClose={() => {
+                setIsExportModalOpen(false);
+                setShowCodeSnippet(false);
+                setExportError(null);
+              }}
+              sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+              <Box
+                sx={{
+                  backgroundColor: '#1A3A5A',
+                  borderRadius: '8px',
+                  p: 3,
+                  width: '90%',
+                  maxWidth: 600,
+                  maxHeight: '80vh',
+                  overflowY: 'auto',
+                  color: '#FFFFFF',
+                }}
+              >
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                    Export Model
+                  </Typography>
+                  <IconButton
+                    onClick={() => setIsExportModalOpen(false)}
+                    sx={{ color: '#E57373' }}
                   >
-                    Download Model
-                  </Button>
-                </span>
-              </Tooltip>
-
-            <div className="flex items-center mb-4 gap-2">
-              <Typography className="text-white">Input</Typography>
-              <Switch checked={inputOn} onChange={e => setInputOn(e.target.checked)} />
-              <Typography className="text-white">{inputOn ? 'ON' : 'OFF'}</Typography>
-            </div>
-
-            {inputOn && (
-              <>
-                <TextField
-                  select
-                  value={source}
-                  onChange={e => setSource(e.target.value as 'Webcam' | 'File')}
-                  size="small"
-                  fullWidth
-                  className="mb-4 bg-transparent text-white rounded"
-                  InputProps={{ disableUnderline: true, sx: { color: '#f0e6ff' } }}
-                  SelectProps={{ sx: { '& .MuiSelect-icon': { color: '#fff' } } }}
-                >
-                  {['Webcam', 'File'].map(opt => (
-                    <MenuItem key={opt} value={opt}>
-                      {opt}
-                    </MenuItem>
-                  ))}
-                </TextField>
-
-                {source === 'Webcam' && (
-                  <div className="mb-4">
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      className="w-full rounded-lg"
-                    />
-                  </div>
-                )}
-
-                {source === 'File' && (
-                  <div className="mb-4 text-center">
+                    <CloseIcon />
+                  </IconButton>
+                </Box>
+                {isExporting ? (
+                  <Box sx={{ textAlign: 'center' }}>
+                    <CircularProgress size={24} sx={{ color: '#4A90E2', mb: 2 }} />
+                    <Typography sx={{ color: '#AEDFF7' }}>
+                      Exporting your model, please wait...
+                    </Typography>
+                  </Box>
+                ) : exportError ? (
+                  <Box>
+                    <Typography sx={{ color: '#E57373', mb: 2 }}>{exportError}</Typography>
                     <Button
-                      variant="contained"
-                      startIcon={<UploadIcon />}
-                      onClick={() => fileRef.current?.click()}
+                      onClick={() => setIsExportModalOpen(false)}
+                      sx={{ color: '#E57373' }}
+                    >
+                      Close
+                    </Button>
+                  </Box>
+                ) : showCodeSnippet ? (
+                  <Box>
+                    <Typography sx={{ color: '#AEDFF7', mb: 2 }}>
+                      Model exported successfully! Your download should start shortly.
+                    </Typography>
+                    <Typography sx={{ color: '#AEDFF7', mb: 2 }}>
+                      Use this code snippet to load your model in a web project:
+                    </Typography>
+                    <Box
                       sx={{
-                        background: 'linear-gradient(45deg, #7b5aff 0%, #8e8ffa 100%)',
-                        color: '#fff',
-                        borderRadius: '8px',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.1em',
-                        transition: 'all 0.3s ease',
-                        '&:hover': {
-                          background: 'linear-gradient(45deg, #6f4eff 0%, #8486f3 100%)',
-                        },
+                        maxHeight: 250,
+                        overflowY: 'auto',
+                        p: 2,
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: '4px',
+                        backgroundColor: '#254E70',
+                        mb: 2,
                       }}
                     >
-                      Upload Image
-                    </Button>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      ref={fileRef}
-                      className="hidden"
-                      onChange={handleUpload}
-                    />
-                    {previewSrc && (
-                      <img
-                        src={previewSrc}
-                        className="mt-2 w-[200px] h-auto rounded-lg"
-                      />
-                    )}
-                  </div>
-                )}
-
-                {results.map((res, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: i * 0.05 }}
-                    className="mb-2 p-3 rounded-lg"
-                    style={{ background: 'rgba(255, 255, 255, 0.05)' }}
-                  >
-                    <div className="flex justify-between mb-1">
-                      <Typography className="text-white font-medium">
-                        {res.label}
-                      </Typography>
-                      <Typography className="text-white/70">
-                        {(res.confidence * 100).toFixed(1)}%
-                      </Typography>
-                    </div>
-                    <LinearProgress
-                      variant="determinate"
-                      value={res.confidence * 100}
-                      className="h-2 rounded-full"
+                      <pre style={{ fontSize: '0.875rem', color: '#FFFFFF', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                        <code>{codeSnippet}</code>
+                      </pre>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        startIcon={<FileCopyIcon />}
+                        onClick={handleCopyCode}
+                        sx={{
+                          color: '#FFFFFF',
+                          borderColor: 'rgba(255, 255, 255, 0.2)',
+                          '&:hover': { borderColor: '#4A90E2', backgroundColor: 'rgba(255, 255, 255, 0.05)' },
+                        }}
+                      >
+                        Copy Code
+                      </Button>
+                      <Button
+                        variant="contained"
+                        onClick={() => setIsExportModalOpen(false)}
+                        sx={{
+                          backgroundColor: '#4A90E2',
+                          color: '#FFFFFF',
+                          '&:hover': { backgroundColor: '#357ABD' },
+                        }}
+                      >
+                        Close
+                      </Button>
+                    </Box>
+                  </Box>
+                ) : (
+                  <Box>
+                    <Typography sx={{ color: '#AEDFF7', mb: 2 }}>
+                      Your model will be exported in <strong>TensorFlow.js</strong> format.
+                    </Typography>
+                    <Typography sx={{ color: '#AEDFF7', mb: 2 }}>
+                      TensorFlow.js is a powerful library that lets you run machine learning models directly in web browsers or Node.js environments. Export your model to deploy it in interactive web applications, leveraging JavaScript for real-time predictions!
+                    </Typography>
+                    <Button
+                      variant="outlined"
                       sx={{
-                        background: 'rgba(255,255,255,0.1)',
-                        '& .MuiLinearProgress-bar': {
-                          background: 'linear-gradient(45deg, #7b5aff 0%, #8e8ffa 100%)',
-                        },
+                        color: '#4A90E2',
+                        borderColor: '#4A90E2',
+                        mb: 2,
+                        '&:hover': { backgroundColor: 'rgba(74, 144, 226, 0.1)', borderColor: '#357ABD' },
                       }}
-                    />
-                  </motion.div>
+                      onClick={() => window.open('https://www.tensorflow.org/js', '_blank')}
+                    >
+                      Learn More About TensorFlow.js
+                    </Button>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                      <Button
+                        onClick={() => setIsExportModalOpen(false)}
+                        sx={{ color: '#E57373' }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleExport}
+                        disabled={isExporting}
+                        variant="contained"
+                        sx={{
+                          backgroundColor: '#4A90E2',
+                          color: '#FFFFFF',
+                          '&:hover': { backgroundColor: '#357ABD' },
+                          '&.Mui-disabled': { backgroundColor: 'rgba(0, 0, 0, 0.2)' },
+                        }}
+                      >
+                        {isExporting ? 'Exporting...' : 'Export'}
+                      </Button>
+                    </Box>
+                  </Box>
+                )}
+                <Snackbar
+                  open={isSnackbarOpen}
+                  autoHideDuration={3000}
+                  onClose={handleSnackbarClose}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+                >
+                  <Alert
+                    onClose={handleSnackbarClose}
+                    severity="success"
+                    sx={{ backgroundColor: '#4A90E2', color: '#FFFFFF' }}
+                  >
+                    Code copied to clipboard!
+                  </Alert>
+                </Snackbar>
+              </Box>
+              </Modal>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 1 }}>
+            <Typography sx={{ color: '#FFFFFF', fontSize: '1rem' }}>Input</Typography>
+            <Switch
+              checked={inputOn}
+              onChange={e => setInputOn(e.target.checked)}
+              sx={{
+                '& .MuiSwitch-track': { backgroundColor: 'rgba(255, 255, 255, 0.2)' },
+                '& .MuiSwitch-thumb': { backgroundColor: '#4A90E2' },
+              }}
+            />
+            <Typography sx={{ color: '#AEDFF7', fontSize: '1rem' }}>
+              {inputOn ? 'ON' : 'OFF'}
+            </Typography>
+          </Box>
+
+          {inputOn && (
+            <>
+              <TextField
+                select
+                value={source}
+                onChange={e => setSource(e.target.value as 'Webcam' | 'File')}
+                size="small"
+                fullWidth
+                sx={{
+                  mb: 3,
+                  '& .MuiInputBase-input': { color: '#FFFFFF', fontSize: '1rem' },
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.2)' },
+                    '&:hover fieldset': { borderColor: '#4A90E2' },
+                  },
+                }}
+              >
+                {['Webcam', 'File'].map(opt => (
+                  <MenuItem key={opt} value={opt}>
+                    {opt}
+                  </MenuItem>
                 ))}
-              </>
-            )}
-          </div>
+              </TextField>
+
+              {source === 'Webcam' && (
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  style={{ width: '100%', borderRadius: '8px', marginBottom: '24px' }}
+                />
+              )}
+
+              {source === 'File' && (
+                <Box sx={{ mb: 3, textAlign: 'center' }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<UploadIcon />}
+                    onClick={() => fileRef.current?.click()}
+                    sx={{
+                      backgroundColor: '#4A90E2',
+                      color: '#FFFFFF',
+                      borderRadius: '4px',
+                      py: 1,
+                      '&:hover': { backgroundColor: '#357ABD' },
+                    }}
+                  >
+                    Upload Image
+                  </Button>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    ref={fileRef}
+                    className="hidden"
+                    onChange={handleUpload}
+                  />
+                  {previewSrc && (
+                    <img
+                      src={previewSrc}
+                      style={{ maxWidth: '100%', height: 'auto', borderRadius: '8px', marginTop: '16px' }}
+                    />
+                  )}
+                </Box>
+              )}
+
+              {results.map((res, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  sx={{
+                    mb: 2,
+                    p: 2,
+                    borderRadius: '4px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography sx={{ color: '#FFFFFF', fontSize: '1rem' }}>
+                      {res.label}
+                    </Typography>
+                    <Typography sx={{ color: '#AEDFF7', fontSize: '1rem' }}>
+                      {(res.confidence * 100).toFixed(1)}%
+                    </Typography>
+                  </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={res.confidence * 100}
+                    sx={{
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                      '& .MuiLinearProgress-bar': { backgroundColor: '#4A90E2' },
+                    }}
+                  />
+                </motion.div>
+              ))}
+            </>
+          )}
         </CardContent>
-      </div>
-    </Card>
-  </motion.div>
-);
+      </Card>
+    </motion.div>
+  );
 };
 
 interface ClassInputSectionProps {
@@ -1066,7 +1691,7 @@ interface ClassInputSectionProps {
 }
 
 const ClassInputSection: React.FC<ClassInputSectionProps> = ({ classes, setClasses, addImageToClass, removeImageFromClass }) => (
-  <div className="flex-1 min-h-0 overflow-y-auto pr-4 scrollbar-thin scrollbar-thumb-space-white/20 scrollbar-track-transparent">
+  <div className="flex-1 min-h-0 overflow-y-auto pr-4 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100">
     {classes.map(c => (
       <ClassCard
         key={c.id}
@@ -1076,7 +1701,7 @@ const ClassInputSection: React.FC<ClassInputSectionProps> = ({ classes, setClass
         removeImageFromClass={removeImageFromClass}
       />
     ))}
-   <Tooltip title="Add a new class" arrow>
+    <Tooltip title="Add a new class" arrow>
       <span>
         <Button
           variant="contained"
@@ -1086,22 +1711,22 @@ const ClassInputSection: React.FC<ClassInputSectionProps> = ({ classes, setClass
             setClasses([...classes, { id: newId, name: `Class ${newId}`, images: [] }]);
           }}
           sx={{
-            background: 'linear-gradient(45deg, #7b5aff 0%, #8e8ffa 100%)',
-            color: '#ffffff',
+            backgroundColor: '#4A90E2',
+            color: '#FFFFFF',
             textTransform: 'uppercase',
             letterSpacing: '0.1em',
             borderRadius: '12px',
-            boxShadow: '0 4px 15px rgba(123, 90, 255, 0.4)',
+            boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)',
             py: 1.5,
             transition: 'all 0.3s ease',
             '&:hover': {
-              background: 'linear-gradient(45deg, #6f4eff 0%, #8486f3 100%)',
-              boxShadow: '0 6px 20px rgba(123, 90, 255, 0.6)',
+              backgroundColor: '#3A7BC8',
+              boxShadow: '0 6px 20px rgba(0, 0, 0, 0.15)',
               transform: 'translateY(-2px)',
             },
             '&:active': {
               transform: 'translateY(0)',
-              boxShadow: '0 3px 10px rgba(123, 90, 255, 0.3)',
+              boxShadow: '0 3px 10px rgba(0, 0, 0, 0.1)',
             },
           }}
         >
@@ -1109,9 +1734,6 @@ const ClassInputSection: React.FC<ClassInputSectionProps> = ({ classes, setClass
         </Button>
       </span>
     </Tooltip>
-
-
-
   </div>
 );
 
@@ -1122,14 +1744,14 @@ const ImageClassificationModel: React.FC = () => {
   ]);
   const [truncatedNet, setTruncatedNet] = useState<tf.LayersModel | null>(null);
   const headModelRef = useRef<tf.LayersModel | null>(null);
-  const [isTrained, setIsTrained] = useState(false); // Track training status
+  const [isTrained, setIsTrained] = useState(false);
 
-   // Prompt on refresh if any class contains images
   const hasAnyImages = classes.some(c => c.images.length > 0);
   useUnsavedChangesPrompt(hasAnyImages);
 
   useEffect(() => {
     (async () => {
+      await tf.ready();
       const mobilenet = await tf.loadLayersModel('https://storage.googleapis.com/teachable-machine-models/mobilenet_v2_weights_tf_dim_ordering_tf_kernels_1.0_224_no_top/model.json');
       const layer = mobilenet.getLayer('out_relu');
       const truncatedModel = tf.model({ inputs: mobilenet.inputs, outputs: layer.output });
@@ -1180,11 +1802,11 @@ const ImageClassificationModel: React.FC = () => {
         
         <ArrowForwardIcon className="hidden lg:block text-space-white text-glow my-auto mx-4" />
         
-       <div className="flex flex-col items-center md:flex-row md:justify-center md:space-x-8 space-y-8 md:space-y-0">
-        <TrainingCard classes={classes} truncatedNet={truncatedNet} headModelRef={headModelRef} onTrainingComplete={() => setIsTrained(true)}/>
-        <ArrowForwardIcon className="hidden lg:block text-space-white text-glow my-auto mx-4" />
-        <PreviewCard   classes={classes} truncatedNet={truncatedNet} headModelRef={headModelRef} isTrained={isTrained}/>
-      </div>
+        <div className="flex flex-col items-center md:flex-row md:justify-center md:space-x-8 space-y-8 md:space-y-0">
+          <TrainingCard classes={classes} truncatedNet={truncatedNet} headModelRef={headModelRef} onTrainingComplete={() => setIsTrained(true)} isTrained={isTrained}/>
+          <ArrowForwardIcon className="hidden lg:block text-space-white text-glow my-auto mx-4" />
+          <PreviewCard classes={classes} truncatedNet={truncatedNet} headModelRef={headModelRef} isTrained={isTrained}/>
+        </div>
       </div>
     </motion.div>
   );
