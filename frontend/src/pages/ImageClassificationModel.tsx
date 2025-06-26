@@ -23,6 +23,9 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
   Snackbar,
   Alert,
   Box
@@ -39,7 +42,6 @@ import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
   FileCopy as FileCopyIcon,
-  X,
 } from '@mui/icons-material';
 import { LockIcon } from 'lucide-react';
 
@@ -154,117 +156,140 @@ const WebcamModal: React.FC<WebcamModalProps> = ({ classId, addImageToClass, onC
   };
 
   return (
-  <Modal open onClose={onClose} disableScrollLock>
-    <div 
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" 
-      onClick={onClose}
-    >
-      <motion.div
-        onClick={e => e.stopPropagation()}
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ type: 'spring', damping: 20 }}
-        className="relative bg-gradient-to-br from-gray-900 to-gray-800 shadow-xl rounded-xl w-full max-w-4xl flex flex-col md:flex-row gap-6 border border-white/10 overflow-hidden"
+    <Modal open onClose={onClose} disableScrollLock>
+      <div 
+        className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center" 
+        onClick={onClose}
       >
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-1 rounded-full bg-white/5 hover:bg-white/10 transition-colors text-white/50 hover:text-white z-10"
+        <motion.div
+          onClick={e => e.stopPropagation()}
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+          className="relative shadow-lg p-8 rounded-2xl w-[95%] max-w-4xl flex flex-col md:flex-row gap-6"
+          style={{ background: 'linear-gradient(to bottom, #F0F8FF, #FFFFFF)' }}
         >
-          <X size={20} />
-        </button>
+          <IconButton
+            size="small"
+            onClick={onClose}
+            sx={{
+              position: 'absolute',
+              top: 4,
+              right: 4,
+              color: '#FF312E',
+              '&:hover': { color: '#DB3069' },
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
 
-        <div className="flex-1 p-6">
-          <h2 className="text-xl font-bold text-white mb-4 text-center">
-            Webcam Live Preview
-          </h2>
-          
-          <div className="relative h-80 bg-black/30 rounded-lg border border-white/10 flex items-center justify-center overflow-hidden">
-            {loading && (
-              <div className="flex space-x-2">
-                {[0, 0.3, 0.6].map((delay) => (
-                  <motion.div
-                    key={delay}
-                    className="w-3 h-3 bg-blue-400 rounded-full"
-                    animate={{ scale: [1, 1.5, 1] }}
-                    transition={{
-                      repeat: Infinity,
-                      duration: 1.5,
-                      delay
+          <div className="flex-1">
+            <Typography variant="h6" sx={{ color: '#333333', fontWeight: 'bold',textAlign:'center' }}>
+              Webcam Live Preview
+            </Typography>
+            <Box sx={{ height: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {loading && (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    '@keyframes pulse': {
+                      '0%': { transform: 'scale(1)' },
+                      '50%': { transform: 'scale(1.5)' },
+                      '100%': { transform: 'scale(1)' },
+                    },
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: '10px',
+                      height: '10px',
+                      backgroundColor: '#4A90E2',
+                      borderRadius: '50%',
+                      margin: '0 5px',
+                      animation: 'pulse 1.5s infinite ease-in-out 0s',
                     }}
                   />
-                ))}
-              </div>
-            )}
-            
-            {error && (
-              <div className="text-center p-4 bg-red-900/50 rounded-lg border border-red-500/50 text-red-100">
-                {error}
-              </div>
-            )}
-            
-            {!loading && !error && (
-              <video
-                ref={videoRef}
-                autoPlay
-                onLoadedMetadata={handleLoadedMetadata}
-                className="absolute inset-0 w-full h-full object-contain"
-              />
-            )}
-          </div>
-          
-          <canvas ref={canvasRef} className="hidden" />
-          
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="mt-4 w-full py-3 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-medium uppercase tracking-wider shadow-md"
-            onMouseDown={startRecording}
-            onMouseUp={stopRecording}
-            onMouseLeave={stopRecording}
-            onTouchStart={startRecording}
-            onTouchEnd={stopRecording}
-            onClick={captureImage}
-          >
-            Hold to Record
-          </motion.button>
-        </div>
-
-        <div className="flex-1 p-6 bg-white/5 border-l border-white/10">
-          <h2 className="text-xl font-bold text-white mb-4 text-center">
-            Captured Images <span className="text-blue-400">({capturedImages.length})</span>
-          </h2>
-          
-          {capturedImages.length > 0 ? (
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-80 overflow-y-auto pr-2">
-              {capturedImages.map((src, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  className="relative group"
-                >
-                  <img
-                    src={src}
-                    alt={`Capture ${i + 1}`}
-                    className="w-full h-20 object-cover rounded-lg border border-white/10 group-hover:border-blue-400 transition-colors"
+                  <Box
+                    sx={{
+                      width: '10px',
+                      height: '10px',
+                      backgroundColor: '#4A90E2',
+                      borderRadius: '50%',
+                      margin: '0 5px',
+                      animation: 'pulse 1.5s infinite ease-in-out 0.3s',
+                    }}
                   />
-                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-lg">
-                    <span className="text-xs font-medium text-white">#{i+1}</span>
-                  </div>
-                </motion.div>
+                  <Box
+                    sx={{
+                      width: '10px',
+                      height: '10px',
+                      backgroundColor: '#4A90E2',
+                      borderRadius: '50%',
+                      margin: '0 5px',
+                      animation: 'pulse 1.5s infinite ease-in-out 0.6s',
+                    }}
+                  />
+                </Box>
+              )}
+              {error && <Typography color="error" sx={{ mb: 2 }}>{error}</Typography>}
+              {!loading && !error && (
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  onLoadedMetadata={handleLoadedMetadata}
+                  className="w-full rounded-lg border border-gray-200"
+                  style={{ maxHeight: '400px' }}
+                />
+              )}
+            </Box>
+            <canvas ref={canvasRef} className="hidden" />
+            <Button
+              variant="contained"
+              className="mt-1 w-full uppercase tracking-wider transition-all duration-300"
+              sx={{
+                backgroundColor: '#4A90E2',
+                color: '#FFFFFF',
+                '&:hover': {
+                  backgroundColor: '#3A7BC8',
+                  transform: 'scale(1.02)',
+                },
+              }}
+              onMouseDown={startRecording}
+              onMouseUp={stopRecording}
+              onMouseLeave={stopRecording}
+              onTouchStart={startRecording}
+              onTouchEnd={stopRecording}
+              onClick={captureImage}
+            >
+              Hold to Record
+            </Button>
+          </div>
+
+          <div
+            className="flex-1 max-h-[400px] overflow-y-auto rounded-lg p-4"
+            
+          >
+            <Typography variant="h6" sx={{ color: '#333333', fontWeight: 'bold', mb: 2,mt:6, textAlign:'center' }}>
+              Captured Images ({capturedImages.length})
+            </Typography>
+            <div className="flex flex-wrap gap-2">
+              {capturedImages.map((src, i) => (
+                <motion.img
+                  key={i}
+                  src={src}
+                  alt={`Capture ${i + 1}`}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                  className="w-20 h-20 object-cover rounded-lg shadow-md"
+                />
               ))}
             </div>
-          ) : (
-            <div className="h-40 flex items-center justify-center text-white/50 text-center">
-              <p>No images captured yet. <br /> Hold the button to record.</p>
-            </div>
-          )}
-        </div>
-      </motion.div>
-    </div>
-  </Modal>
-);
+          </div>
+        </motion.div>
+      </div>
+    </Modal>
+  );
 };
 
 interface ClassItem {
@@ -1092,6 +1117,7 @@ const PreviewCard: React.FC<PreviewCardProps> = ({ classes, truncatedNet, headMo
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [results, setResults] = useState<{ label: string; confidence: number }[]>([]);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [ setSelectedFormat] = useState<'TF.js' | 'TF' | 'TF Lite' | null>('TF.js');
   const [isExporting, setIsExporting] = useState(false);
   const [showCodeSnippet, setShowCodeSnippet] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
