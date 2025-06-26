@@ -95,10 +95,25 @@ const sampleSchema = new mongoose.Schema({
 const Sample = mongoose.model('Sample', sampleSchema);
 
 // ----- Connect to MongoDB -----
-mongoose.connect(MONGO_URI)
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
+// Database connection (modern syntax)
+mongoose.connect(process.env.MONGO_URI, {
+  retryWrites: true,
+  w: 'majority'
+})
+.then(() => console.log('MongoDB connected to Atlas'))
+.catch(err => {
+  console.error('Atlas connection failed. Verify:', {
+    username: 'ahmadhere25',
+    cluster: 'intellitrain.xhhppv3.mongodb.net'
+  });
+  process.exit(1);
+});
 
+// Port configuration for Render
+const PORT = process.env.PORT || 10000; // Render uses 10000 by default
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
+});
 // ----- Authentication Middleware -----
 const protect = async (req, res, next) => {
   let token;
