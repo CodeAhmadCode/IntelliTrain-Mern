@@ -4,7 +4,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Lock, Mail, Eye, EyeOff, Github, AlertCircle } from 'lucide-react';
 import { FcGoogle } from 'react-icons/fc';
 
-const LoginSignup: React.FC = () => {
+interface LoginSignupProps {
+  setIsAuthenticated: (value: boolean) => void;
+}
+
+const LoginSignup: React.FC<LoginSignupProps> = ({ setIsAuthenticated }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(0);
@@ -35,7 +39,6 @@ const LoginSignup: React.FC = () => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
     
-    // Real-time validation
     if (name === 'password') {
       setPasswordStrength(calculatePasswordStrength(value));
       setErrors(prev => ({
@@ -50,7 +53,6 @@ const LoginSignup: React.FC = () => {
       setErrors(prev => ({ ...prev, email: '' }));
     }
 
-    // Clear API errors when typing
     if (errors.apiError) {
       setErrors(prev => ({ ...prev, apiError: '' }));
     }
@@ -60,7 +62,6 @@ const LoginSignup: React.FC = () => {
     let isValid = true;
     const newErrors = { ...errors };
 
-    // Email validation
     if (!formData.email) {
       newErrors.email = 'Email is required';
       isValid = false;
@@ -69,7 +70,6 @@ const LoginSignup: React.FC = () => {
       isValid = false;
     }
 
-    // Password validation
     if (!formData.password) {
       newErrors.password = 'Password is required';
       isValid = false;
@@ -78,7 +78,6 @@ const LoginSignup: React.FC = () => {
       isValid = false;
     }
 
-    // Confirm password validation (only for signup)
     if (!isLogin && formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = 'Passwords do not match';
       isValid = false;
@@ -107,7 +106,7 @@ const LoginSignup: React.FC = () => {
           email: formData.email,
           password: formData.password
         }),
-        credentials: 'include' // Important for cookies
+        credentials: 'include'
       });
 
       const data = await response.json();
@@ -116,12 +115,9 @@ const LoginSignup: React.FC = () => {
         throw new Error(data.error || 'Something went wrong');
       }
 
-      // On successful login/register
       if (data.success) {
-        // Store token in localStorage
         localStorage.setItem('token', data.token);
-        
-        // Redirect to home page
+        setIsAuthenticated(true);
         navigate('/');
       }
     } catch (error) {
@@ -182,7 +178,6 @@ const LoginSignup: React.FC = () => {
             </div>
           </div>
 
-          {/* API Error Message */}
           {errors.apiError && (
             <div className="mb-4 p-3 bg-red-900/30 border border-red-500/50 rounded-lg flex items-center gap-2">
               <AlertCircle size={16} />

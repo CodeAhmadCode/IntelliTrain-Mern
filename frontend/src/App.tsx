@@ -1,7 +1,5 @@
-// src/App.tsx
 import { useEffect, useState } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
-
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import StarField from './components/StarField';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
@@ -13,14 +11,25 @@ import Footer from './components/Footer';
 import ImageClassificationModel from './pages/ImageClassificationModel';
 import PoseClassificationModel from './pages/PoseEstimationModel';
 import AudioClassificationModel from './pages/AudioClassificationModel';
-import Login from './components/Login';  // Import the Login component
+import LoginSignup from './components/Login';
+import Dashboard from './pages/Dashboard';
+import ProtectedRoute from './components/ProtectedRoute';
+import { verifyToken } from './utils/auth';
 
 function App() {
   const { pathname } = useLocation();
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [cursorVisible, setCursorVisible] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
+    // Check authentication status on initial load
+    const checkAuth = async () => {
+      const isAuthenticated = await verifyToken();
+      setIsAuthenticated(isAuthenticated);
+    };
+    checkAuth();
+
     const handleMouseMove = (e: MouseEvent) => {
       setMousePosition({ x: e.clientX, y: e.clientY });
       setCursorVisible(true);
@@ -54,7 +63,7 @@ function App() {
 
       {/* Main Content */}
       <div className="relative z-10">
-        <Navbar />
+        <Navbar isAuthenticated={isAuthenticated} setIsAuthenticated={setIsAuthenticated} />
 
         <Routes>
           <Route path="/" element={
@@ -67,11 +76,26 @@ function App() {
             </>
           }/>
 
-          <Route path="/login" element={<Login />} />
+          <Route path="/login" element={
+            isAuthenticated ? (
+              <Navigate to="/" replace />
+            ) : (
+              <LoginSignup setIsAuthenticated={setIsAuthenticated} />
+            )
+          } />
+          
+          <Route 
+            path="/dashboard" 
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <Dashboard />
+              </ProtectedRoute>
+            } 
+          />
+
           <Route path="/projects/image-model" element={<ImageClassificationModel />} />
           <Route path="/projects/pose-model" element={<PoseClassificationModel />} />
           <Route path="/projects/audio-model" element={<AudioClassificationModel />} />
-          
         </Routes>
 
         {pathname === '/' && <Footer />}

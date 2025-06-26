@@ -8,7 +8,16 @@ const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
-
+// Add this before your routes
+if (process.env.NODE_ENV === 'production') {
+  // Serve static files from React
+  app.use(express.static(path.join(__dirname, '../client/build')));
+  
+  // Handle React routing, return all requests to React app
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
+  });
+}
 // ----- Config & Constants -----
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/audio-classification';
 const PORT = parseInt(process.env.PORT, 10) || 5000;
