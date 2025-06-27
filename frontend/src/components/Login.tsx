@@ -86,7 +86,7 @@ const LoginSignup: React.FC<LoginSignupProps> = ({ setIsAuthenticated }) => {
     setErrors(newErrors);
     return isValid;
   };
-
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -96,8 +96,8 @@ const LoginSignup: React.FC<LoginSignupProps> = ({ setIsAuthenticated }) => {
     setErrors(prev => ({ ...prev, apiError: '' }));
 
     try {
-      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
-      const response = await fetch(`http://localhost:5000${endpoint}`, {
+    const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
