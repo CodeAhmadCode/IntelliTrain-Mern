@@ -10,8 +10,9 @@ const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 
 // ----- Config & Constants -----
-const MONGO_URI = process.env.MONGO_URI;
-const PORT = process.env.PORT || 10000;
+const MONGO_URI = process.env.MONGO_URI?.trim(); // Remove hidden whitespace
+console.log("Connecting to MongoDB with URI:", MONGO_URI);
+const PORT = process.env.PORT || 5000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const JWT_EXPIRE = process.env.JWT_EXPIRE || '1d';
