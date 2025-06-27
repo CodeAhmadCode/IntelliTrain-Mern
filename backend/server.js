@@ -8,8 +8,7 @@ const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
-const axios = require('axios');
-const AUDIO_API_URL = process.env.AUDIO_API_URL || 'http://localhost:5001';
+
 // ----- Config & Constants -----
 const MONGO_URI = process.env.MONGO_URI?.trim(); // Remove hidden whitespace
 console.log("Connecting to MongoDB with URI:", MONGO_URI);
@@ -217,33 +216,7 @@ app.post('/api/audio/classes', protect, async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-app.post('/api/audio/train', protect, async (req, res) => {
-  try {
-    const response = await axios.post(`${AUDIO_API_URL}/api/audio/train`, {}, {
-      headers: { 'Authorization': `Bearer ${req.cookies.token}` }
-    });
-    res.json(response.data);
-  } catch (err) {
-    res.status(500).json({ error: 'Training failed' });
-  }
-});
 
-app.post('/api/audio/predict', protect, async (req, res) => {
-  try {
-    const formData = new FormData();
-    formData.append('audio', req.files.audio.data, req.files.audio.name);
-    
-    const response = await axios.post(`${AUDIO_API_URL}/api/audio/predict`, formData, {
-      headers: { 
-        'Authorization': `Bearer ${req.cookies.token}`,
-        'Content-Type': 'multipart/form-data'
-      }
-    });
-    res.json(response.data);
-  } catch (err) {
-    res.status(500).json({ error: 'Prediction failed' });
-  }
-});
 app.post('/api/audio/samples', protect, async (req, res) => {
   try {
     if (!req.files || !req.files.audio) {
