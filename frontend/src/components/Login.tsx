@@ -86,7 +86,10 @@ const LoginSignup: React.FC<LoginSignupProps> = ({ setIsAuthenticated }) => {
     setErrors(newErrors);
     return isValid;
   };
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
+  // Updated API_BASE_URL configuration
+  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -96,7 +99,9 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
     setErrors(prev => ({ ...prev, apiError: '' }));
 
     try {
-    const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
+      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
+      console.log('Making request to:', `${API_BASE_URL}${endpoint}`); // Debug log
+      
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
         headers: {
@@ -115,11 +120,9 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
         throw new Error(data.error || 'Something went wrong');
       }
 
-      if (data.success) {
-        localStorage.setItem('token', data.token);
-        setIsAuthenticated(true);
-        navigate('/');
-      }
+      localStorage.setItem('token', data.token);
+      setIsAuthenticated(true);
+      navigate('/');
     } catch (error) {
       setErrors(prev => ({ 
         ...prev, 

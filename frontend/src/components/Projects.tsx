@@ -41,7 +41,7 @@ const Projects: React.FC = () => {
       title: "Pose Detection",
       description: "Real-time body pose estimation models using MoveNet architecture. Captures 17 key body points at 30+ FPS.",
       image: PoseEstimationImage,
-      link: "/projects/image-model",
+      link: "/projects/pose-model",
       tags: ["Motion", "Tracking", "Gesture"]
     }
   ];
