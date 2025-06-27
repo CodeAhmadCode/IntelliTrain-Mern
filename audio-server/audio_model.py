@@ -24,8 +24,16 @@ from bson import ObjectId
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
-
+CORS(app, resources={
+    r"/api/*": {
+        "origins": [
+            "http://localhost:5173",
+            "https://intellitrain-mern-1.onrender.com"
+        ],
+        "methods": ["GET", "POST", "DELETE"],
+        "allow_headers": ["Content-Type"]
+    }
+})
 # Configure TensorFlow logging
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 tf.get_logger().setLevel('ERROR')
