@@ -23,7 +23,7 @@ const app = express();
 
 // ----- Middleware -----
 app.use(cors({
-  origin: CLIENT_ORIGIN,
+  origin: [CLIENT_ORIGIN,"https://intellitrain-mern-1.onrender.com"],
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
@@ -106,6 +106,10 @@ mongoose.connect(MONGO_URI, {
 .catch(err => {
   console.error('MongoDB connection error:', err.message);
   process.exit(1);
+});
+
+app.get('/', (req, res) => {
+  res.send('IntelliTrain API is running');
 });
 
 // ----- Authentication Middleware -----
