@@ -10,26 +10,26 @@ const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 
 // ----- Config & Constants -----
-const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://ahmadhere25:hmad123%40@intellitrain.xhhppv3.mongodb.net/?retryWrites=true&w=majority&appName=IntelliTrain" || 'mongodb://localhost:27017/audio-classification';
-const PORT = process.env.PORT || 10000; 
+const MONGO_URI = process.env.MONGO_URI;
+const PORT = process.env.PORT || 10000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const JWT_EXPIRE = process.env.JWT_EXPIRE || '1d';
-const UPLOAD_DIR = path.join(__dirname, 'uploads');
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
 
 // ----- Initialize App -----
 const app = express();
 
 // ----- Middleware -----
-app.use(cors({ 
-  origin: CLIENT_ORIGIN, 
-  credentials: true 
+app.use(cors({
+  origin: CLIENT_ORIGIN,
+  credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cookieParser());
 app.use(fileUpload({
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  limits: { fileSize: 50 * 1024 * 1024 },
   abortOnLimit: true,
   createParentPath: true
 }));
@@ -38,8 +38,8 @@ app.use(fileUpload({
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
+
 // ----- MongoDB Models -----
-// User Model for Authentication
 const userSchema = new mongoose.Schema({
   email: {
     type: String,
@@ -78,7 +78,7 @@ userSchema.methods.matchPassword = async function(enteredPassword) {
 
 const User = mongoose.model('User', userSchema);
 
-// Your existing Audio Classification Models
+// Audio Classification Models
 const classSchema = new mongoose.Schema({
   name: { type: String, unique: true, required: true },
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
@@ -95,25 +95,18 @@ const sampleSchema = new mongoose.Schema({
 const Sample = mongoose.model('Sample', sampleSchema);
 
 // ----- Connect to MongoDB -----
-// Database connection (modern syntax)
-mongoose.connect(process.env.MONGO_URI, {
+mongoose.connect(MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
   retryWrites: true,
   w: 'majority'
 })
-.then(() => console.log('MongoDB connected to Atlas'))
+.then(() => console.log('MongoDB connected successfully'))
 .catch(err => {
-  console.error('Atlas connection failed. Verify:', {
-    username: 'ahmadhere25',
-    cluster: 'intellitrain.xhhppv3.mongodb.net'
-  });
+  console.error('MongoDB connection error:', err.message);
   process.exit(1);
 });
 
-// Port configuration for Render
-// Render uses 10000 by default
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-});
 // ----- Authentication Middleware -----
 const protect = async (req, res, next) => {
   let token;
@@ -200,7 +193,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Your existing Audio Classification Routes (now protected)
+// Audio Classification Routes
 app.post('/api/audio/classes', protect, async (req, res) => {
   try {
     const { name } = req.body;
@@ -255,8 +248,6 @@ app.post('/api/audio/samples', protect, async (req, res) => {
   }
 });
 
-// Your other existing routes (get sample, delete sample, train, predict)
-// Add protect middleware to all of them and ensure user ownership
 app.get('/api/audio/samples/:id/play', protect, async (req, res) => {
   try {
     const sample = await Sample.findOne({ 
@@ -271,7 +262,7 @@ app.get('/api/audio/samples/:id/play', protect, async (req, res) => {
   }
 });
 
-// Add similar protection to your other routes...
+// Additional protected routes would go here...
 
 // Error handling
 app.use((err, req, res, next) => {
@@ -280,6 +271,6 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
 });
