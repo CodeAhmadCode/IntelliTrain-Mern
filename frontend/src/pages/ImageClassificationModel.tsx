@@ -236,6 +236,7 @@ const WebcamModal: React.FC<WebcamModalProps> = ({ classId, addImageToClass, onC
                 <video
                   ref={videoRef}
                   autoPlay
+                  playsInline
                   onLoadedMetadata={handleLoadedMetadata}
                   className="w-full rounded-lg border border-gray-200"
                   style={{ maxHeight: '400px' }}
