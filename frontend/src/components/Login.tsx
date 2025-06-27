@@ -87,8 +87,8 @@ const LoginSignup: React.FC<LoginSignupProps> = ({ setIsAuthenticated }) => {
     return isValid;
   };
 
-  // Updated API_BASE_URL configuration
-  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+  // Vite environment variable usage
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,7 +100,7 @@ const LoginSignup: React.FC<LoginSignupProps> = ({ setIsAuthenticated }) => {
 
     try {
       const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
-      console.log('Making request to:', `${API_BASE_URL}${endpoint}`); // Debug log
+      console.log('API Request to:', `${API_BASE_URL}${endpoint}`);
       
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
@@ -114,16 +114,26 @@ const LoginSignup: React.FC<LoginSignupProps> = ({ setIsAuthenticated }) => {
         credentials: 'include'
       });
 
-      const data = await response.json();
-
+      // Improved error handling
       if (!response.ok) {
-        throw new Error(data.error || 'Something went wrong');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message || 
+          errorData.error || 
+          `HTTP error! status: ${response.status}`
+        );
       }
 
+      const data = await response.json();
+      
+      // Store token and user data
       localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
       setIsAuthenticated(true);
       navigate('/');
+
     } catch (error) {
+      console.error('Login error:', error);
       setErrors(prev => ({ 
         ...prev, 
         apiError: error instanceof Error ? error.message : 'Failed to process your request' 
